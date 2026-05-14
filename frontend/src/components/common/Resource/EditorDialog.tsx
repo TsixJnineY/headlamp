@@ -30,6 +30,7 @@ import _ from 'lodash';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
+import { toAuditEventResource, toAuditEventResources } from '../../../features/audit/resourceAudit';
 import { getCluster } from '../../../lib/cluster';
 import { apply } from '../../../lib/k8s/api/v1/apply';
 import { KubeObjectInterface } from '../../../lib/k8s/KubeObject';
@@ -373,6 +374,17 @@ export default function EditorDialog(props: EditorDialogProps) {
       );
 
       dispatchCreateEvent({
+        cluster: clusterName,
+        resource:
+          newItemDefs.length === 1
+            ? toAuditEventResource({ ...newItemDefs[0], cluster: clusterName })
+            : undefined,
+        resources: toAuditEventResources(
+          newItemDefs.map(newItemDef => ({
+            ...newItemDef,
+            cluster: clusterName,
+          }))
+        ),
         status: EventStatus.CONFIRMED,
       });
     } else if (typeof onSave === 'function') {

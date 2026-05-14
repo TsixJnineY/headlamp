@@ -21,6 +21,12 @@ import _ from 'lodash';
 import { useSnackbar } from 'notistack';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { createAuditSessionId } from '../../features/audit/session';
+import {
+  createTerminalInputCollector,
+  type TerminalInputCollector,
+} from '../../features/audit/terminalAudit';
 import { DEFAULT_POD_DEBUG_IMAGE, loadClusterSettings } from '../../helpers/clusterSettings';
 import { getCluster } from '../../lib/cluster';
 import Pod from '../../lib/k8s/pod';
@@ -34,6 +40,7 @@ import { Channel, useTerminalStream, XTerminalConnected } from '../../lib/k8s/us
  */
 interface PodDebugTerminalProps {
   item: Pod;
+  sessionId?: string;
   onClose?: () => void;
 }
 
@@ -167,13 +174,29 @@ async function debugPod(
  * @returns DialogContent with embedded terminal
  */
 export function PodDebugTerminal(props: PodDebugTerminalProps) {
-  const { item, onClose } = props;
+  const { item, onClose, sessionId } = props;
   const { t } = useTranslation(['translation']);
   const { enqueueSnackbar } = useSnackbar();
   const [terminalContainerRef, setTerminalContainerRef] = useState<HTMLElement | null>(null);
   const exitSentRef = useRef(false);
   const pendingExitRef = useRef(false);
   const containerCreatedRef = useRef(false);
+  const auditSessionIdRef = useRef(sessionId || createAuditSessionId('pod-debug'));
+  const debugContainerNameRef = useRef<string>('headlamp-debug');
+  const terminalAuditRef = useRef<TerminalInputCollector>(
+    createTerminalInputCollector(() => ({
+      cluster: item.cluster || undefined,
+      namespace: item.metadata.namespace,
+      pod: item.metadata.name,
+      container: debugContainerNameRef.current,
+      sessionId: auditSessionIdRef.current,
+      action: 'pod-debug',
+      details: {
+        target_kind: 'Pod',
+        target_name: item.metadata.name,
+      },
+    }))
+  );
 
   const { xtermRef, streamRef, send } = useTerminalStream({
     containerRef: terminalContainerRef,
@@ -202,11 +225,13 @@ export function PodDebugTerminal(props: PodDebugTerminalProps) {
       if (runningDebugContainer) {
         containerName = runningDebugContainer.name;
         containerCreatedRef.current = true;
+        debugContainerNameRef.current = containerName;
         xtermRef.current?.xterm.writeln(
           t('translation|Attaching to existing debug container...') + '\r\n'
         );
       } else {
         containerName = generateContainerName(item);
+        debugContainerNameRef.current = containerName;
 
         xtermRef.current?.xterm.writeln(t('translation|Creating ephemeral debug container...'));
 
@@ -239,6 +264,7 @@ export function PodDebugTerminal(props: PodDebugTerminalProps) {
         stream,
       };
     },
+    onInput: data => terminalAuditRef.current.record(data),
     onClose: wrappedOnClose,
     errorHandlers: {
       isSuccessfulExit: isSuccessfulExitError,
@@ -279,6 +305,27 @@ export function PodDebugTerminal(props: PodDebugTerminalProps) {
   };
 
   async function wrappedOnClose() {
+    terminalAuditRef.current.flush();
+    await emitAuditEvent({
+      source: 'headlamp',
+      event_type: 'ui_action',
+      action: 'close_pod_debug_terminal',
+      cluster: item.cluster || undefined,
+      namespace: item.metadata.namespace,
+      session_id: auditSessionIdRef.current,
+      resource: {
+        kind: 'Pod',
+        name: item.metadata.name,
+        cluster: item.cluster || undefined,
+        namespace: item.metadata.namespace,
+        container: debugContainerNameRef.current,
+      },
+      extra: {
+        mode: 'pod-debug',
+        target_kind: 'Pod',
+        target_name: item.metadata.name,
+      },
+    });
     requestShellExit('dialog-close');
 
     // Note: Kubernetes doesn't allow removing ephemeral containers via API.
@@ -352,6 +399,8 @@ export function PodDebugTerminal(props: PodDebugTerminalProps) {
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+
+      terminalAuditRef.current.flush();
 
       if (!exitSentRef.current && containerCreatedRef.current) {
         const sent = sendExitIfPossible();

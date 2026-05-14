@@ -32,6 +32,7 @@ import { uniq } from 'lodash';
 import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useHistory } from 'react-router';
+import { emitAuditEvent } from '../../features/audit/emitter';
 import { useClustersConf } from '../../lib/k8s';
 import { apply } from '../../lib/k8s/api/v1/apply';
 import { ApiError } from '../../lib/k8s/api/v2/ApiError';
@@ -176,6 +177,36 @@ function ProjectFromExistingNamespace({ onBack }: { onBack: () => void }) {
     try {
       const existingNamespaces = namespaces?.filter(it => it.metadata.name === selectedNamespace);
       const clustersWithExistingNamespace = existingNamespaces?.map(it => it.cluster) ?? [];
+      const clustersWithoutNamespace = selectedClusters.filter(
+        it => !clustersWithExistingNamespace.includes(it)
+      );
+
+      selectedClusters.forEach(cluster => {
+        const namespaceAction = clustersWithExistingNamespace.includes(cluster)
+          ? 'label_existing_namespace'
+          : 'create_namespace';
+
+        void emitAuditEvent({
+          source: 'headlamp',
+          event_type: 'ui_action',
+          action: 'create_project',
+          cluster,
+          namespace: effectiveNamespace,
+          resource: {
+            kind: 'Namespace',
+            name: effectiveNamespace,
+            cluster,
+          },
+          result: 'requested',
+          extra: {
+            project_id: projectName,
+            namespace_action: namespaceAction,
+            existing_namespace_clusters: clustersWithExistingNamespace,
+            created_namespace_clusters: clustersWithoutNamespace,
+          },
+        });
+      });
+
       if (existingNamespaces && existingNamespaces.length > 0) {
         // Update all existing namespaces with the same name across selected clusters
         await Promise.all(
@@ -192,9 +223,6 @@ function ProjectFromExistingNamespace({ onBack }: { onBack: () => void }) {
       }
 
       // Create new namespace in all selected clusters that don't already have it
-      const clustersWithoutNamespace = selectedClusters.filter(
-        it => !clustersWithExistingNamespace.includes(it)
-      );
       for (const cluster of clustersWithoutNamespace) {
         const namespace = {
           kind: 'Namespace',

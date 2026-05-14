@@ -20,6 +20,8 @@ import { styled } from '@mui/material/styles';
 import { alpha } from '@mui/system/colorManipulator';
 import { Handle, NodeProps, Position } from '@xyflow/react';
 import { memo, useEffect, useState } from 'react';
+import { emitAuditEvent } from '../../../features/audit/emitter';
+import { toAuditResource } from '../../../features/audit/resourceAudit';
 import { Activity } from '../../activity/Activity';
 import { GraphNodeDetails } from '../details/GraphNodeDetails';
 import { getMainNode } from '../graph/graphGrouping';
@@ -205,6 +207,17 @@ export const KubeObjectNodeComponent = memo(({ id }: NodeProps) => {
 
     const hasContent = node.detailsComponent || node.kubeObject;
     if (!hasContent) return;
+
+    if (node.kubeObject) {
+      emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action: 'details_view',
+        cluster: node.kubeObject.cluster,
+        namespace: node.kubeObject.metadata?.namespace,
+        resource: toAuditResource(node.kubeObject),
+      });
+    }
 
     Activity.launch({
       id: node.id,

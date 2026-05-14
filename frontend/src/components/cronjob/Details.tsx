@@ -28,6 +28,8 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { toAuditResource } from '../../features/audit/resourceAudit';
 import { apply } from '../../lib/k8s/api/v1/apply';
 import CronJob from '../../lib/k8s/cronJob';
 import Job from '../../lib/k8s/job';
@@ -83,6 +85,26 @@ function SpawnJobDialog(props: { cronJob: CronJob; onClose: () => void }) {
         },
       ];
     }
+    emitAuditEvent({
+      source: 'headlamp',
+      event_type: 'ui_action',
+      action: 'spawn_cronjob_job',
+      cluster: cronJob.cluster,
+      namespace: cronJob.metadata.namespace,
+      resource: toAuditResource(cronJob),
+      result: 'requested',
+      extra: {
+        job_name: jobName,
+        spawned_resource: toAuditResource({
+          kind: 'Job',
+          metadata: {
+            name: jobName,
+            namespace: cronJob.metadata.namespace,
+          },
+          cluster: cronJob.cluster,
+        }),
+      },
+    });
     onClose();
     dispatch(
       clusterAction(() => apply(job), {
@@ -161,6 +183,18 @@ export default function CronJobDetails(props: {
 
   function applySuspend(cronJob: CronJob, suspend: boolean) {
     setIsPendingSuspend(true);
+    emitAuditEvent({
+      source: 'headlamp',
+      event_type: 'ui_action',
+      action: suspend ? 'suspend_cronjob' : 'resume_cronjob',
+      cluster: cronJob.cluster,
+      namespace: cronJob.metadata.namespace,
+      resource: toAuditResource(cronJob),
+      result: 'requested',
+      extra: {
+        desired_suspend: suspend,
+      },
+    });
     dispatch(
       clusterAction(
         () => cronJob.patch({ spec: { suspend } }).finally(() => setIsPendingSuspend(false)),

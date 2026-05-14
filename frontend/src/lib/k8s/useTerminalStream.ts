@@ -76,6 +76,8 @@ export interface TerminalStreamOptions {
     rows?: number;
     windowsMode?: boolean;
   };
+  /** Optional hook to observe raw stdin data before it is sent */
+  onInput?: (data: string) => void;
 }
 
 /**
@@ -97,6 +99,7 @@ export function useTerminalStream(options: TerminalStreamOptions) {
     errorHandlers,
     detectOS = false,
     xtermOptions = {},
+    onInput,
   } = options;
 
   const xtermRef = useRef<XTerminalConnected | null>(null);
@@ -200,6 +203,7 @@ export function useTerminalStream(options: TerminalStreamOptions) {
           dataToSend = '|';
         }
 
+        onInput?.(dataToSend);
         send(Channel.StdIn, dataToSend);
       });
 
@@ -232,7 +236,7 @@ export function useTerminalStream(options: TerminalStreamOptions) {
 
       fitAddon.fit();
     },
-    [send]
+    [onInput, send]
   );
 
   useEffect(() => {

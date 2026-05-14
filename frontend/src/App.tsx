@@ -25,6 +25,7 @@ import AppContainer from './components/App/AppContainer';
 import { useCurrentAppTheme } from './components/App/themeSlice';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import ErrorComponent from './components/common/ErrorPage';
+import { initializeAuditFeature } from './features/audit/bootstrap';
 import i18n from './i18n/config';
 import { useElectronI18n } from './i18n/electronI18n';
 import ThemeProviderNexti18n from './i18n/ThemeProviderNexti18n';
@@ -35,6 +36,7 @@ import { useTypedSelector } from './redux/hooks';
 import store from './redux/stores/store';
 
 setStore(store);
+initializeAuditFeature(store);
 
 function AppWithRedux(props: React.PropsWithChildren<{}>) {
   let themeName = useTypedSelector(state => state.theme.name);

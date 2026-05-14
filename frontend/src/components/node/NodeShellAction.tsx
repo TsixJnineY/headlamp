@@ -15,6 +15,8 @@
  */
 
 import { useTranslation } from 'react-i18next';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { createAuditSessionId } from '../../features/audit/session';
 import { DEFAULT_NODE_SHELL_NAMESPACE, loadClusterSettings } from '../../helpers/clusterSettings';
 import { getCluster } from '../../lib/cluster';
 import Node from '../../lib/k8s/node';
@@ -74,6 +76,19 @@ export function NodeShellAction(props: NodeShellTerminalProps) {
             }
             icon="mdi:bug"
             onClick={() => {
+              const sessionId = createAuditSessionId('node-shell');
+              void emitAuditEvent({
+                source: 'headlamp',
+                event_type: 'ui_action',
+                action: 'open_node_shell_terminal',
+                cluster: item.cluster || undefined,
+                session_id: sessionId,
+                resource: {
+                  kind: 'Node',
+                  name: item.metadata.name,
+                },
+              });
+
               Activity.launch({
                 id: activityId,
                 location: 'full',
@@ -83,6 +98,7 @@ export function NodeShellAction(props: NodeShellTerminalProps) {
                   <NodeShellTerminal
                     key="terminal"
                     item={item}
+                    sessionId={sessionId}
                     onClose={() => Activity.close(activityId)}
                   />
                 ),

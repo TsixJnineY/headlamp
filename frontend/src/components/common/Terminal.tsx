@@ -27,6 +27,12 @@ import { Terminal as XTerminal } from '@xterm/xterm';
 import _ from 'lodash';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { createAuditSessionId } from '../../features/audit/session';
+import {
+  createTerminalInputCollector,
+  type TerminalInputCollector,
+} from '../../features/audit/terminalAudit';
 import { getDefaultContainer } from '../../helpers/podContainer';
 import Pod from '../../lib/k8s/pod';
 import { Dialog } from './Dialog';
@@ -45,6 +51,7 @@ enum Channel {
 interface TerminalProps extends DialogProps {
   item: Pod;
   isAttach?: boolean;
+  sessionId?: string;
   /** Don't render the terminal in the dialog */
   noDialog?: boolean;
   onClose?: () => void;
@@ -59,12 +66,16 @@ interface XTerminalConnected {
 type execReturn = ReturnType<Pod['exec']>;
 
 export default function Terminal(props: TerminalProps) {
-  const { item, onClose, isAttach, noDialog, ...other } = props;
+  const { item, onClose, isAttach, noDialog, sessionId, ...other } = props;
   const [terminalContainerRef, setTerminalContainerRef] = React.useState<HTMLElement | null>(null);
   const [container, setContainer] = useState<string | null>(() => getDefaultContainer(item));
   const execOrAttachRef = React.useRef<execReturn | null>(null);
   const fitAddonRef = React.useRef<FitAddon | null>(null);
   const xtermRef = React.useRef<XTerminalConnected | null>(null);
+  const auditSessionIdRef = React.useRef<string>('');
+  const currentContainerRef = React.useRef<string | null>(null);
+  const currentSessionKindRef = React.useRef<'exec' | 'attach'>(isAttach ? 'attach' : 'exec');
+  const terminalAuditRef = React.useRef<TerminalInputCollector | null>(null);
   const [shells, setShells] = React.useState({
     available: getAvailableShells(),
     currentIdx: 0,
@@ -96,6 +107,7 @@ export default function Terminal(props: TerminalProps) {
         dataToSend = '|';
       }
 
+      terminalAuditRef.current?.record(dataToSend);
       send(0, dataToSend);
     });
 
@@ -280,6 +292,16 @@ export default function Terminal(props: TerminalProps) {
       }
 
       const isWindows = ['Windows', 'Win16', 'Win32', 'WinCE'].indexOf(navigator?.platform) >= 0;
+      auditSessionIdRef.current = sessionId || createAuditSessionId(isAttach ? 'attach' : 'exec');
+      terminalAuditRef.current = createTerminalInputCollector(() => ({
+        cluster: item.cluster || undefined,
+        namespace: item.metadata.namespace,
+        pod: item.metadata.name,
+        container: container || undefined,
+        sessionId: auditSessionIdRef.current,
+        action: isAttach ? 'attach' : 'exec',
+      }));
+
       xtermRef.current = {
         xterm: new XTerminal({
           cursorBlink: true,
@@ -328,6 +350,8 @@ export default function Terminal(props: TerminalProps) {
       window.addEventListener('resize', handler);
 
       return function cleanup() {
+        terminalAuditRef.current?.flush();
+        terminalAuditRef.current = null;
         xtermRef.current?.xterm.dispose();
         execOrAttachRef.current?.cancel();
         execOrAttachRef.current = null;
@@ -347,6 +371,35 @@ export default function Terminal(props: TerminalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [props.open]
   );
+
+  React.useEffect(() => {
+    currentContainerRef.current = container;
+    currentSessionKindRef.current = isAttach ? 'attach' : 'exec';
+  }, [container, isAttach]);
+
+  React.useEffect(() => {
+    return () => {
+      void emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action:
+          currentSessionKindRef.current === 'attach'
+            ? 'close_attach_terminal'
+            : 'close_exec_terminal',
+        cluster: item.cluster || undefined,
+        namespace: item.metadata.namespace,
+        session_id: auditSessionIdRef.current || undefined,
+        resource: {
+          kind: 'Pod',
+          name: item.metadata.name,
+          cluster: item.cluster || undefined,
+          namespace: item.metadata.namespace,
+          container: currentContainerRef.current || undefined,
+        },
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   React.useEffect(() => {
     if (!isAttach && shells.available.length === 0) {

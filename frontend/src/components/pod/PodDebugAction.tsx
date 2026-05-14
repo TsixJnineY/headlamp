@@ -17,6 +17,8 @@
 import { Icon } from '@iconify/react';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { createAuditSessionId } from '../../features/audit/session';
 import { loadClusterSettings } from '../../helpers/clusterSettings';
 import { getCluster } from '../../lib/cluster';
 import Pod from '../../lib/k8s/pod';
@@ -91,6 +93,21 @@ export function PodDebugAction(props: PodDebugActionProps) {
               return;
             }
 
+            const sessionId = createAuditSessionId('pod-debug');
+
+            void emitAuditEvent({
+              source: 'headlamp',
+              event_type: 'ui_action',
+              action: 'open_pod_debug_terminal',
+              cluster: item.cluster || undefined,
+              namespace: item.metadata.namespace,
+              session_id: sessionId,
+              resource: {
+                kind: 'Pod',
+                name: item.metadata.name,
+              },
+            });
+
             Activity.launch({
               id: activityId,
               location: 'full',
@@ -101,6 +118,7 @@ export function PodDebugAction(props: PodDebugActionProps) {
                 <PodDebugTerminal
                   key="pod-debug-terminal"
                   item={item}
+                  sessionId={sessionId}
                   onClose={() => Activity.close(activityId)}
                 />
               ),

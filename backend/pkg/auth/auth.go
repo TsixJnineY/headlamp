@@ -68,10 +68,23 @@ var clusterPathRegex = regexp.MustCompile(`^/clusters/([^/]+)/.*`)
 // https://datatracker.ietf.org/doc/html/rfc6750#section-2.1
 var bearerTokenRegex = regexp.MustCompile(`^[\x21-\x7E]+$`)
 
+type ParsedRequestAuth struct {
+	Cluster     string
+	Token       string
+	TokenSource string
+}
+
 // ParseClusterAndToken extracts the cluster name from the URL path and
 // the Bearer token from the Authorization header of the HTTP request, falling
 // back to the cluster cookie when the header is missing.
 func ParseClusterAndToken(r *http.Request) (string, string) {
+	parsed := ParseRequestAuth(r)
+	return parsed.Cluster, parsed.Token
+}
+
+// ParseRequestAuth extracts the cluster name and token from an HTTP request
+// together with the token transport used to provide the credential.
+func ParseRequestAuth(r *http.Request) ParsedRequestAuth {
 	cluster := ""
 
 	matches := clusterPathRegex.FindStringSubmatch(r.URL.Path)
@@ -82,7 +95,7 @@ func ParseClusterAndToken(r *http.Request) (string, string) {
 	// Try Authorization header first (for backward compatibility)
 	token := strings.TrimSpace(r.Header.Get("Authorization"))
 	if strings.Contains(token, ",") {
-		return cluster, ""
+		return ParsedRequestAuth{Cluster: cluster, Token: "", TokenSource: "none"}
 	}
 
 	const bearerPrefix = "Bearer "
@@ -90,18 +103,24 @@ func ParseClusterAndToken(r *http.Request) (string, string) {
 		token = strings.TrimSpace(token[len(bearerPrefix):])
 	}
 
+	tokenSource := "none"
+	if token != "" {
+		tokenSource = "authorization_header"
+	}
+
 	// If no auth header, try cookie
 	if token == "" && cluster != "" {
 		if cookieToken, err := GetTokenFromCookie(r, cluster); err == nil && cookieToken != "" {
 			token = cookieToken
+			tokenSource = "cluster_cookie"
 		}
 	}
 
 	if token != "" && !bearerTokenRegex.MatchString(token) {
-		return cluster, ""
+		return ParsedRequestAuth{Cluster: cluster, Token: "", TokenSource: tokenSource}
 	}
 
-	return cluster, token
+	return ParsedRequestAuth{Cluster: cluster, Token: token, TokenSource: tokenSource}
 }
 
 // GetExpiryUnixTimeUTC expiration unix time UTC from a token payload map exp field.
@@ -284,19 +303,18 @@ type MeHandlerOptions struct {
 	GroupsPaths string
 	// UserInfoURL is the URL to fetch additional user info for the /me endpoint.
 	UserInfoURL string
+	// ContextGetter returns the kubeconfig context for a given cluster when available.
+	ContextGetter func(string) (*kubeconfig.Context, error)
 }
 
 // HandleMe returns a handler that reads the per-cluster auth cookie and responds with user info.
 func HandleMe(opts MeHandlerOptions) http.HandlerFunc {
-	usernamePaths, emailPaths, groupsPaths, userInfoURL := cfg.ApplyMeDefaults(
+	_, _, _, userInfoURL := applyMeDefaults(
 		opts.UsernamePaths,
 		opts.EmailPaths,
 		opts.GroupsPaths,
 		opts.UserInfoURL,
 	)
-	compiledUsernamePaths := compileJMESPaths(usernamePaths)
-	compiledEmailPaths := compileJMESPaths(emailPaths)
-	compiledGroupsPaths := compileJMESPaths(groupsPaths)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		clusterName := mux.Vars(r)["clusterName"]
@@ -321,23 +339,28 @@ func HandleMe(opts MeHandlerOptions) http.HandlerFunc {
 			return
 		}
 
-		claims, status, errMsg := parseClaimsFromToken(token)
-		if status != 0 {
-			writeMeJSON(w, status, map[string]interface{}{"message": errMsg})
+		identity, err := ResolveRequestIdentity(r, clusterName, ResolveOptions{
+			UsernamePaths: opts.UsernamePaths,
+			EmailPaths:    opts.EmailPaths,
+			GroupsPaths:   opts.GroupsPaths,
+			ContextGetter: opts.ContextGetter,
+		})
+		if err != nil {
+			status := http.StatusUnauthorized
+			if err.Error() == "cluster mismatch" {
+				status = http.StatusBadRequest
+			}
+
+			writeMeJSON(w, status, map[string]interface{}{"message": err.Error()})
 			return
 		}
 
-		if expiry, err := GetExpiryUnixTimeUTC(claims); err != nil || time.Now().After(expiry) {
-			writeMeJSON(w, http.StatusUnauthorized, map[string]interface{}{"message": "token expired"})
-			return
-		}
-
-		username := stringValueFromJMESPaths(claims, compiledUsernamePaths)
-		email := stringValueFromJMESPaths(claims, compiledEmailPaths)
-		groups := stringSliceFromJMESPaths(claims, compiledGroupsPaths)
-
-		writeMeResponse(w, username, email, groups, userInfoURL)
+		writeMeResponse(w, identity.Username, identity.Email, identity.Groups, userInfoURL)
 	}
+}
+
+func applyMeDefaults(usernamePaths, emailPaths, groupsPaths, userInfoURL string) (string, string, string, string) {
+	return cfg.ApplyMeDefaults(usernamePaths, emailPaths, groupsPaths, userInfoURL)
 }
 
 // parseClaimsFromToken extracts the JWT claims from a token.

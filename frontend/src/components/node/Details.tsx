@@ -24,6 +24,8 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { toAuditResource } from '../../features/audit/resourceAudit';
 import { apply } from '../../lib/k8s/api/v1/apply';
 import { drainNode, drainNodeStatus } from '../../lib/k8s/api/v1/drainNode';
 import type { ApiError } from '../../lib/k8s/api/v2/ApiError';
@@ -107,6 +109,18 @@ export default function NodeDetails(props: { name?: string; cluster?: string }) 
     const cloneNode = _.cloneDeep(node);
 
     cloneNode.spec.unschedulable = !cordon;
+    void emitAuditEvent({
+      source: 'headlamp',
+      event_type: 'ui_action',
+      action: cordon ? 'uncordon_node' : 'cordon_node',
+      cluster: node.cluster || getCluster() || undefined,
+      resource: toAuditResource(node),
+      result: 'requested',
+      extra: {
+        previous_unschedulable: Boolean(cordon),
+        desired_unschedulable: !cordon,
+      },
+    });
     dispatch(
       clusterAction(
         () =>
@@ -170,6 +184,18 @@ export default function NodeDetails(props: { name?: string; cluster?: string }) 
   function handleNodeDrain(node: Node) {
     const cluster = getCluster();
     if (!cluster) return;
+
+    void emitAuditEvent({
+      source: 'headlamp',
+      event_type: 'ui_action',
+      action: 'drain_node',
+      cluster,
+      resource: toAuditResource(node),
+      result: 'requested',
+      extra: {
+        node: node.metadata.name,
+      },
+    });
 
     setisNodeDrainInProgress(true);
     dispatch(

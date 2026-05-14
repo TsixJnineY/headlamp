@@ -18,6 +18,8 @@ import MuiLink from '@mui/material/Link';
 import { useQueryClient } from '@tanstack/react-query';
 import React from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { toAuditResource } from '../../features/audit/resourceAudit';
 import { formatClusterPathParam, getCluster, getSelectedClusters } from '../../lib/cluster';
 import { kubeObjectQueryKey, useEndpoints } from '../../lib/k8s/api/v2/hooks';
 import type { KubeObject } from '../../lib/k8s/KubeObject';
@@ -185,6 +187,22 @@ export default function Link(props: React.PropsWithChildren<LinkProps | LinkObje
                   customResourceDefinition: props.params?.crd,
                 }
               : { kind, metadata: { name, namespace }, cluster };
+
+          emitAuditEvent({
+            source: 'headlamp',
+            event_type: 'ui_action',
+            action: 'details_view',
+            cluster: selectedResource.cluster,
+            namespace: selectedResource.metadata.namespace,
+            resource: toAuditResource({
+              kind: selectedResource.kind,
+              metadata: {
+                name: selectedResource.metadata.name,
+                namespace: selectedResource.metadata.namespace,
+              },
+              cluster: selectedResource.cluster,
+            }),
+          });
 
           Activity.launch({
             id:

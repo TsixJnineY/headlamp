@@ -35,6 +35,8 @@ import { Dispatch, FormEvent, SetStateAction, useMemo, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Trans, useTranslation } from 'react-i18next';
 import { Redirect, useHistory } from 'react-router';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { toAuditResource } from '../../features/audit/resourceAudit';
 import { useClustersConf } from '../../lib/k8s';
 import { apply } from '../../lib/k8s/api/v1/apply';
 import { ApiError } from '../../lib/k8s/api/v2/ApiError';
@@ -79,6 +81,26 @@ async function createProjectFromYaml({
     stage: 'creating',
     createdResources: [],
     creatingResource: namespace,
+  });
+
+  const auditResources = [
+    { ...namespace, cluster },
+    ...itemsToCreate.map(item => ({ ...item, cluster })),
+  ].map(item => toAuditResource(item));
+
+  void emitAuditEvent({
+    source: 'headlamp',
+    event_type: 'ui_action',
+    action: 'create_project_from_yaml',
+    cluster,
+    namespace: k8sName,
+    resource: auditResources[0],
+    result: 'requested',
+    extra: {
+      project_id: k8sName,
+      resource_count: auditResources.length,
+      resources: auditResources,
+    },
   });
 
   await apply(namespace, cluster);

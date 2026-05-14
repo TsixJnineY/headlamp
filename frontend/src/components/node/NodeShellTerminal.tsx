@@ -18,6 +18,12 @@ import Box from '@mui/material/Box';
 import DialogContent from '@mui/material/DialogContent';
 import _ from 'lodash';
 import { useEffect, useRef, useState } from 'react';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { createAuditSessionId } from '../../features/audit/session';
+import {
+  createTerminalInputCollector,
+  type TerminalInputCollector,
+} from '../../features/audit/terminalAudit';
 import {
   DEFAULT_NODE_SHELL_LINUX_IMAGE,
   DEFAULT_NODE_SHELL_NAMESPACE,
@@ -32,6 +38,7 @@ import { Channel, useTerminalStream, XTerminalConnected } from '../../lib/k8s/us
 
 interface NodeShellTerminalProps {
   item: Node;
+  sessionId?: string;
   onClose?: () => void;
 }
 
@@ -129,24 +136,52 @@ async function shell(item: Node, onExec: StreamResultsCb) {
   ];
   return {
     stream: stream(url, onExec, { additionalProtocols, isJson: false }),
+    namespace,
+    podName,
   };
 }
 
 export function NodeShellTerminal(props: NodeShellTerminalProps) {
-  const { item, onClose } = props;
+  const { item, onClose, sessionId } = props;
   const [terminalContainerRef, setTerminalContainerRef] = useState<HTMLElement | null>(null);
   const exitSentRef = useRef(false);
   const pendingExitRef = useRef(false);
+  const auditSessionIdRef = useRef(sessionId || createAuditSessionId('node-shell'));
+  const debugPodRef = useRef<{ namespace?: string; pod?: string }>({});
+  const terminalAuditRef = useRef<TerminalInputCollector>(
+    createTerminalInputCollector(() => ({
+      cluster: item.cluster || undefined,
+      namespace: debugPodRef.current.namespace,
+      pod: debugPodRef.current.pod,
+      sessionId: auditSessionIdRef.current,
+      container: 'debugger',
+      action: 'node-shell',
+      resKind: 'Node',
+      resName: item.metadata.name,
+      resNamespace: '',
+      resContainer: 'debugger',
+      details: {
+        target_kind: 'Node',
+        target_name: item.metadata.name,
+        debug_pod: debugPodRef.current.pod,
+      },
+    }))
+  );
 
   const { xtermRef, streamRef, send } = useTerminalStream({
     containerRef: terminalContainerRef,
     connectStream: async onDataCallback => {
       xtermRef.current?.xterm.writeln('Trying to open a shell');
-      const { stream } = await shell(item, onDataCallback);
+      const { stream, namespace, podName } = await shell(item, onDataCallback);
+      debugPodRef.current = {
+        namespace,
+        pod: podName,
+      };
       return {
         stream,
       };
     },
+    onInput: data => terminalAuditRef.current.record(data),
     onClose: wrappedOnClose,
     errorHandlers: {
       isSuccessfulExit: isSuccessfulExitError,
@@ -187,6 +222,28 @@ export function NodeShellTerminal(props: NodeShellTerminalProps) {
   };
 
   function wrappedOnClose() {
+    terminalAuditRef.current.flush();
+    void emitAuditEvent({
+      source: 'headlamp',
+      event_type: 'ui_action',
+      action: 'close_node_shell_terminal',
+      cluster: item.cluster || undefined,
+      namespace: debugPodRef.current.namespace,
+      pod: debugPodRef.current.pod,
+      session_id: auditSessionIdRef.current,
+      container: 'debugger',
+      resource: {
+        kind: 'Node',
+        name: item.metadata.name,
+        cluster: item.cluster || undefined,
+      },
+      extra: {
+        mode: 'node-shell',
+        target_kind: 'Node',
+        target_name: item.metadata.name,
+        debug_pod: debugPodRef.current.pod,
+      },
+    });
     requestShellExit('dialog-close');
     if (onClose) {
       onClose();
@@ -255,6 +312,7 @@ export function NodeShellTerminal(props: NodeShellTerminalProps) {
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      terminalAuditRef.current.flush();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

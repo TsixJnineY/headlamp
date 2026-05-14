@@ -32,6 +32,8 @@ import { Trans, useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { generatePath, useHistory, useLocation, useRouteMatch } from 'react-router';
 import { FixedSizeList } from 'react-window';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { toAuditResource } from '../../features/audit/resourceAudit';
 import { loadClusterSettings } from '../../helpers/clusterSettings';
 import { useClustersConf, useSelectedClusters } from '../../lib/k8s';
 import ConfigMap from '../../lib/k8s/configMap';
@@ -243,6 +245,14 @@ export function GlobalSearchContent({
             });
 
         if (drawerEnabled) {
+          emitAuditEvent({
+            source: 'headlamp',
+            event_type: 'ui_action',
+            action: 'details_view',
+            cluster: item.cluster,
+            namespace: item.metadata.namespace,
+            resource: toAuditResource(item),
+          });
           Activity.launch({
             id: item.metadata.uid,
             content: <KubeObjectDetails resource={item} />,

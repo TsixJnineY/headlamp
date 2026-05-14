@@ -19,6 +19,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
+import { buildEditAuditDetails } from '../../../features/audit/editDiff';
 import { KubeObject } from '../../../lib/k8s/KubeObject';
 import { KubeObjectInterface } from '../../../lib/k8s/KubeObject';
 import { CallbackActionOptions, clusterAction } from '../../../redux/clusterActionSlice';
@@ -75,6 +76,14 @@ export default function EditButton(props: EditButtonProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const applyFunc = React.useCallback(updateFunc, [item]);
 
+  function closeEditorActivity() {
+    dispatchHeadlampEditEvent({
+      resource: item,
+      status: EventStatus.CLOSED,
+    });
+    Activity.close(activityId);
+  }
+
   function handleSave(items: KubeObjectInterface[]) {
     const newItemDef = Array.isArray(items) ? items[0] : items;
     const cancelUrl = location.pathname;
@@ -95,7 +104,8 @@ export default function EditButton(props: EditButtonProps) {
 
     dispatchHeadlampEditEvent({
       resource: item,
-      status: EventStatus.CLOSED,
+      status: EventStatus.CONFIRMED,
+      details: buildEditAuditDetails(item, newItemDef),
     });
     if (afterConfirm) {
       afterConfirm();
@@ -139,7 +149,7 @@ export default function EditButton(props: EditButtonProps) {
                 noDialog
                 item={item.getEditableObject()}
                 open
-                onClose={() => Activity.close(activityId)}
+                onClose={closeEditorActivity}
                 onSave={handleSave}
                 allowToHideManagedFields
                 errorMessage={errorMessage}

@@ -27,6 +27,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useHistory, useLocation } from 'react-router-dom';
+import { emitAuditEvent } from '../../features/audit/emitter';
 import { loadClusterSettings } from '../../helpers/clusterSettings';
 import { useCluster, useClustersConf } from '../../lib/k8s';
 import Namespace from '../../lib/k8s/namespace';
@@ -212,6 +213,15 @@ export function NamespacesAutocomplete() {
   const onChange = (event: React.ChangeEvent<{}>, newValue: string[]) => {
     addQuery({ namespace: newValue.join(' ') }, { namespace: '' }, history, location, '');
     dispatch(setNamespaceFilter(newValue));
+    void emitAuditEvent({
+      source: 'headlamp',
+      event_type: 'ui_action',
+      action: 'switch_namespace',
+      cluster: cluster || undefined,
+      extra: {
+        namespaces: newValue,
+      },
+    });
   };
 
   return namespaceNames.length > 0 ? (

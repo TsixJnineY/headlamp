@@ -36,6 +36,9 @@ type HeadlampConfig struct {
 	MeEmailPaths              string
 	MeGroupsPaths             string
 	MeUserInfoURL             string
+	AuditEnabled              bool
+	AuditLogUIActions         bool
+	AuditLogTerminalInput     bool
 }
 
 type HeadlampCFG struct {

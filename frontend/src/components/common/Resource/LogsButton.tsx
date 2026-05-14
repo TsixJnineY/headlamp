@@ -27,6 +27,8 @@ import { Terminal as XTerminal } from '@xterm/xterm';
 import { useSnackbar } from 'notistack';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { emitAuditEvent } from '../../../features/audit/emitter';
+import { toAuditResource } from '../../../features/audit/resourceAudit';
 import { labelSelectorToQuery } from '../../../lib/k8s';
 import { clusterFetch } from '../../../lib/k8s/api/v2/fetch';
 import { makeUrl } from '../../../lib/k8s/api/v2/makeUrl';
@@ -37,6 +39,11 @@ import { KubeObject } from '../../../lib/k8s/KubeObject';
 import Pod from '../../../lib/k8s/pod';
 import ReplicaSet from '../../../lib/k8s/replicaSet';
 import StatefulSet from '../../../lib/k8s/statefulSet';
+import {
+  EventStatus,
+  HeadlampEventType,
+  useEventCallback,
+} from '../../../redux/headlampEventSlice';
 import { Activity } from '../../activity/Activity';
 import ActionButton from '../ActionButton';
 import { LogViewer } from '../LogViewer';
@@ -519,7 +526,16 @@ function LogsButtonContent({ item }: LogsButtonProps) {
         selectedPodIndex === 'all' ? 'all_pods' : pods[selectedPodIndex as number]?.getName()
       }`}
       open
-      onClose={() => {}}
+      onClose={() =>
+        emitAuditEvent({
+          source: 'headlamp',
+          event_type: 'ui_action',
+          action: 'close_logs',
+          cluster: item?.cluster,
+          namespace: item?.metadata?.namespace,
+          resource: toAuditResource(item),
+        })
+      }
       logs={logs.logs}
       topActions={topActions}
       xtermRef={xtermRef}
@@ -531,9 +547,16 @@ function LogsButtonContent({ item }: LogsButtonProps) {
 
 export function LogsButton({ item }: LogsButtonProps) {
   const { t } = useTranslation();
+  const dispatchHeadlampEvent = useEventCallback(HeadlampEventType.LOGS);
 
   const onClick = () => {
     if (!item) return;
+
+    dispatchHeadlampEvent({
+      resource: item,
+      status: EventStatus.OPENED,
+    });
+
     Activity.launch({
       id: 'logs-' + item.metadata.uid,
       title: 'Logs: ' + item.metadata.name,

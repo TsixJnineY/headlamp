@@ -18,6 +18,7 @@ import { Icon } from '@iconify/react';
 import { Box, Typography } from '@mui/material';
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { createAuditSessionId } from '../../features/audit/session';
 import DaemonSet from '../../lib/k8s/daemonSet';
 import Deployment from '../../lib/k8s/deployment';
 import { KubeObject } from '../../lib/k8s/KubeObject';
@@ -25,6 +26,7 @@ import Pod from '../../lib/k8s/pod';
 import ReplicaSet from '../../lib/k8s/replicaSet';
 import { getKubeObjectCategory, ResourceCategory } from '../../lib/k8s/ResourceCategory';
 import StatefulSet from '../../lib/k8s/statefulSet';
+import { EventStatus, HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { Activity } from '../activity/Activity';
 import { StatusLabel } from '../common';
 import ActionButton from '../common/ActionButton/ActionButton';
@@ -87,6 +89,7 @@ export function ProjectResourcesTab({
   setSelectedCategoryName,
 }: ProjectResourcesTabProps) {
   const { t } = useTranslation();
+  const dispatchHeadlampEvent = useEventCallback();
 
   const resourceCategories = useResourceCategoriesList(projectResources);
 
@@ -331,6 +334,13 @@ export function ProjectResourcesTab({
                       icon="mdi:file-document-box-outline"
                       onClick={() => {
                         const id = 'logs-' + resource.metadata.uid;
+                        dispatchHeadlampEvent({
+                          type: HeadlampEventType.LOGS,
+                          data: {
+                            resource,
+                            status: EventStatus.OPENED,
+                          },
+                        });
                         Activity.launch({
                           id,
                           title: t('Logs: {{ itemName }}', { itemName: resource.metadata.name }),
@@ -357,6 +367,15 @@ export function ProjectResourcesTab({
                       icon="mdi:console"
                       onClick={() => {
                         const id = 'terminal-' + resource.metadata.uid;
+                        const sessionId = createAuditSessionId('exec');
+                        dispatchHeadlampEvent({
+                          type: HeadlampEventType.TERMINAL,
+                          data: {
+                            resource,
+                            session_id: sessionId,
+                            status: EventStatus.OPENED,
+                          },
+                        });
                         Activity.launch({
                           id,
                           title: resource.metadata.name,
@@ -367,6 +386,7 @@ export function ProjectResourcesTab({
                             <Terminal
                               open
                               item={resource as Pod}
+                              sessionId={sessionId}
                               onClose={() => Activity.close(id)}
                             />
                           ),

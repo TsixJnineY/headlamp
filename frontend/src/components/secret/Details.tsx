@@ -22,6 +22,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { toAuditResource } from '../../features/audit/resourceAudit';
 import Secret from '../../lib/k8s/secret';
 import { clusterAction } from '../../redux/clusterActionSlice';
 import { AppDispatch } from '../../redux/stores/store';
@@ -63,6 +65,20 @@ function SecretDataSection({ item }: SecretDataSectionProps) {
 
   const handleSave = () => {
     const updatedSecret = { ...item.jsonData, data };
+    const keys = Object.keys(data || {});
+    void emitAuditEvent({
+      source: 'headlamp',
+      event_type: 'ui_action',
+      action: 'save_secret_inline',
+      cluster: item.cluster,
+      namespace: item.metadata.namespace,
+      resource: toAuditResource(item),
+      result: 'requested',
+      extra: {
+        keys,
+        key_count: keys.length,
+      },
+    });
     dispatch(
       clusterAction(() => item.update(updatedSecret), {
         startMessage: t('translation|Applying changes to {{ itemName }}…', {

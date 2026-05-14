@@ -46,6 +46,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/kubernetes-sigs/headlamp/backend/pkg/audit"
 	auth "github.com/kubernetes-sigs/headlamp/backend/pkg/auth"
 	"github.com/kubernetes-sigs/headlamp/backend/pkg/cache"
 	cfg "github.com/kubernetes-sigs/headlamp/backend/pkg/config"
@@ -542,8 +543,31 @@ func createHeadlampHandler(ctx context.Context, config *HeadlampConfig) http.Han
 			EmailPaths:    config.MeEmailPaths,
 			GroupsPaths:   config.MeGroupsPaths,
 			UserInfoURL:   config.MeUserInfoURL,
+			ContextGetter: config.KubeConfigStore.GetContext,
 		}),
 	).Methods("GET")
+
+	r.Handle("/clusters/{clusterName}/audit/events", audit.NewHandler(
+		audit.Config{
+			Enabled:          config.AuditEnabled,
+			LogUIActions:     config.AuditLogUIActions,
+			LogTerminalInput: config.AuditLogTerminalInput,
+			UsernamePaths:    config.MeUsernamePaths,
+			EmailPaths:       config.MeEmailPaths,
+			GroupsPaths:      config.MeGroupsPaths,
+			AllowPartialUser: true,
+		},
+		nil,
+		func(w http.ResponseWriter, r *http.Request, clusterName string) error {
+			if _, err := config.KubeConfigStore.GetContext(clusterName); err != nil {
+				http.Error(w, "cluster not found", http.StatusNotFound)
+				return err
+			}
+
+			return nil
+		},
+		config.KubeConfigStore.GetContext,
+	)).Methods("POST")
 
 	config.handleClusterRequests(r)
 

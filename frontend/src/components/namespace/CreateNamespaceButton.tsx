@@ -24,6 +24,7 @@ import TextField from '@mui/material/TextField';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
+import { toAuditEventResource } from '../../features/audit/resourceAudit';
 import { getCluster } from '../../lib/cluster';
 import Namespace from '../../lib/k8s/namespace';
 import { clusterAction } from '../../redux/clusterActionSlice';
@@ -40,17 +41,16 @@ export default function CreateNamespaceButton() {
   const [namespaceDialogOpen, setNamespaceDialogOpen] = useState(false);
   const dispatchCreateEvent = useEventCallback(HeadlampEventType.CREATE_RESOURCE);
   const dispatch: AppDispatch = useDispatch();
+  const clusterData = getCluster();
+  const newNamespaceData = {
+    apiVersion: 'v1',
+    kind: 'Namespace',
+    metadata: {
+      name: namespaceName,
+    },
+  };
 
   function createNewNamespace() {
-    const clusterData = getCluster();
-    const newNamespaceData = {
-      apiVersion: 'v1',
-      kind: 'Namespace',
-      metadata: {
-        name: namespaceName,
-      },
-    };
-
     const newNamespaceName = newNamespaceData.metadata.name;
 
     async function namespaceRequest() {
@@ -151,6 +151,11 @@ export default function CreateNamespaceButton() {
                   if (isValidNamespaceName) {
                     createNewNamespace();
                     dispatchCreateEvent({
+                      cluster: clusterData || undefined,
+                      resource: toAuditEventResource({
+                        ...newNamespaceData,
+                        cluster: clusterData || undefined,
+                      }),
                       status: EventStatus.CONFIRMED,
                     });
                   }
@@ -174,6 +179,11 @@ export default function CreateNamespaceButton() {
             onClick={() => {
               createNewNamespace();
               dispatchCreateEvent({
+                cluster: clusterData || undefined,
+                resource: toAuditEventResource({
+                  ...newNamespaceData,
+                  cluster: clusterData || undefined,
+                }),
                 status: EventStatus.CONFIRMED,
               });
             }}

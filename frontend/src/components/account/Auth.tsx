@@ -26,6 +26,7 @@ import Typography from '@mui/material/Typography';
 import React from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { generatePath, useHistory, useLocation } from 'react-router-dom';
+import { emitAuditEvent } from '../../features/audit/emitter';
 import { setToken } from '../../lib/auth';
 import { getCluster, getClusterPrefixedPath } from '../../lib/cluster';
 import { useClustersConf } from '../../lib/k8s';
@@ -216,6 +217,13 @@ async function loginWithToken(token: string) {
 
     await setToken(cluster, token);
     await testAuth();
+    await emitAuditEvent({
+      source: 'headlamp',
+      event_type: 'ui_action',
+      action: 'login_token',
+      cluster,
+      result: 'success',
+    });
 
     return 200;
   } catch (err) {

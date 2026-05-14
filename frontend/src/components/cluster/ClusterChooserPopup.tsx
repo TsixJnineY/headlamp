@@ -29,6 +29,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath } from 'react-router';
 import { useHistory } from 'react-router-dom';
+import { emitAuditEvent } from '../../features/audit/emitter';
 import { getClusterAppearanceFromMeta } from '../../helpers/clusterAppearance';
 import { isElectron } from '../../helpers/isElectron';
 import { getRecentClusters, setRecentCluster } from '../../helpers/recentClusters';
@@ -162,6 +163,16 @@ function ClusterChooserPopup(props: ChooserPopupPros) {
     handleClose();
 
     if (cluster.name !== getCluster()) {
+      void emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action: 'switch_cluster',
+        cluster: cluster.name,
+        extra: {
+          previousCluster: getCluster() || undefined,
+          targetCluster: cluster.name,
+        },
+      });
       setRecentCluster(cluster);
       history.push({
         pathname: generatePath(getClusterPrefixedPath(), {

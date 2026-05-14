@@ -17,6 +17,7 @@
 import type { PayloadAction } from '@reduxjs/toolkit';
 import { createAction, createListenerMiddleware, createSlice } from '@reduxjs/toolkit';
 import { useDispatch } from 'react-redux';
+import type { AuditResourceRef } from '../features/audit/types';
 import type Event from '../lib/k8s/event';
 import type { KubeObject } from '../lib/k8s/KubeObject';
 import type Pod from '../lib/k8s/pod';
@@ -133,9 +134,11 @@ export interface EditResourceEvent {
     /** The resource for which the deletion was called. */
     resource: KubeObject;
     /** What exactly this event represents. 'OPEN' when the edit dialog is opened. 'CLOSED' when it
-     * is closed.
+     * is closed. 'CONFIRMED' when the user saves and applies the edited resource.
      */
-    status: EventStatus.OPENED | EventStatus.CLOSED;
+    status: EventStatus.OPENED | EventStatus.CLOSED | EventStatus.CONFIRMED;
+    /** Action-specific audit details for the edit event. */
+    details?: Record<string, unknown>;
   };
 }
 
@@ -147,6 +150,10 @@ export interface ScaleResourceEvent {
   data: {
     /** The resource for which the deletion was called. */
     resource: KubeObject;
+    /** Current replica count before the scale action. */
+    previousReplicas?: number;
+    /** Desired replica count requested by the user. */
+    desiredReplicas?: number;
     /** What exactly this event represents. 'CONFIRMED' when the scaling is selected by the user.
      * For now only 'CONFIRMED' is sent.
      */
@@ -222,6 +229,8 @@ export interface TerminalEvent {
   data: {
     /** The resource for which the terminal was opened (currently this only happens for Pod instances). */
     resource?: KubeObject;
+    /** Stable audit session identifier for correlating open/input/close events. */
+    session_id?: string;
     /** What exactly this event represents. 'OPEN' when the terminal is opened. 'CLOSED' when it
      * is closed.
      */
@@ -237,6 +246,8 @@ export interface PodAttachEvent {
   data: {
     /** The resource for which the terminal was opened (currently this only happens for Pod instances). */
     resource?: Pod;
+    /** Stable audit session identifier for correlating open/input/close events. */
+    session_id?: string;
     /** What exactly this event represents. 'OPEN' when the attach dialog is opened. 'CLOSED' when it
      * is closed.
      */
@@ -250,6 +261,12 @@ export interface PodAttachEvent {
 export interface CreateResourceEvent {
   type: HeadlampEventType.CREATE_RESOURCE;
   data: {
+    /** The resource that was created when a single object is applied. */
+    resource?: AuditResourceRef;
+    /** The resources that were created when multiple objects are applied. */
+    resources?: AuditResourceRef[];
+    /** The target cluster where the resource creation was requested. */
+    cluster?: string;
     /** What exactly this event represents. 'CONFIRMED' when the user chooses to apply the new resource.
      * For now only 'CONFIRMED' is sent.
      */

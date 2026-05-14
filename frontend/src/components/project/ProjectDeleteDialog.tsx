@@ -27,6 +27,8 @@ import {
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
+import { emitAuditEvent } from '../../features/audit/emitter';
+import { toAuditResource } from '../../features/audit/resourceAudit';
 import Namespace from '../../lib/k8s/namespace';
 import { clusterAction } from '../../redux/clusterActionSlice';
 import { ProjectDefinition } from '../../redux/projectsSlice';
@@ -56,6 +58,34 @@ export function ProjectDeleteDialog({
     const projectNamespaces = namespaces.filter(ns =>
       project.namespaces.includes(ns.metadata.name)
     );
+    const namespacesByCluster = new Map<string, Namespace[]>();
+
+    projectNamespaces.forEach(namespace => {
+      if (!namespace.cluster) {
+        return;
+      }
+      namespacesByCluster.set(namespace.cluster, [
+        ...(namespacesByCluster.get(namespace.cluster) || []),
+        namespace,
+      ]);
+    });
+
+    namespacesByCluster.forEach((clusterNamespaces, cluster) => {
+      void emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action: 'delete_project',
+        cluster,
+        resource: toAuditResource(clusterNamespaces[0]),
+        result: 'requested',
+        extra: {
+          project_id: project.id,
+          delete_namespaces: deleteNamespaces,
+          namespaces: clusterNamespaces.map(namespace => namespace.metadata.name),
+          namespace_resources: clusterNamespaces.map(namespace => toAuditResource(namespace)),
+        },
+      });
+    });
 
     dispatch(
       clusterAction(

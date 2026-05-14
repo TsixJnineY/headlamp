@@ -125,6 +125,12 @@ interface ScaleDialogProps extends Omit<DialogProps, 'resource'> {
   errorMessage?: string;
 }
 
+function getReplicaCount(resource: Deployment | StatefulSet | ReplicaSet): number | undefined {
+  const replicas = (resource as any)?.spec?.replicas ?? (resource as any)?.jsonData?.spec?.replicas;
+  const replicaCount = Number(replicas);
+  return Number.isFinite(replicaCount) ? replicaCount : undefined;
+}
+
 const Input = styled(OutlinedInput)({
   '& input[type=number]': {
     MozAppearance: 'textfield',
@@ -146,11 +152,7 @@ function ScaleDialog(props: ScaleDialogProps) {
   const dispatchHeadlampEvent = useEventCallback(HeadlampEventType.SCALE_RESOURCE);
 
   function getNumReplicas() {
-    if (!('spec' in resource)) {
-      return -1;
-    }
-
-    return parseInt(resource.spec.replicas);
+    return getReplicaCount(resource) ?? -1;
   }
 
   const currentNumReplicas = getNumReplicas();
@@ -235,6 +237,8 @@ function ScaleDialog(props: ScaleDialogProps) {
             onSave(numReplicas);
             dispatchHeadlampEvent({
               resource: resource,
+              previousReplicas: currentNumReplicas,
+              desiredReplicas: numReplicas,
               status: EventStatus.CONFIRMED,
             });
           }}

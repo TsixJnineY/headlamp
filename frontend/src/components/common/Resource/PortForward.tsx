@@ -25,6 +25,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { emitAuditEvent } from '../../../features/audit/emitter';
 import { isDockerDesktop } from '../../../helpers/isDockerDesktop';
 import { isElectron } from '../../../helpers/isElectron';
 import { getCluster } from '../../../lib/cluster';
@@ -279,6 +280,29 @@ function PortForwardContent(props: PortForwardProps) {
       .then((data: any) => {
         setLoading(false);
         setPortForward(data);
+        void emitAuditEvent({
+          source: 'headlamp',
+          event_type: 'ui_action',
+          action: 'start_port_forward',
+          cluster,
+          namespace,
+          resource: resource
+            ? {
+                kind: resource.kind,
+                name,
+                cluster,
+                namespace,
+              }
+            : undefined,
+          result: data?.status || PORT_FORWARD_RUNNING_STATUS,
+          extra: {
+            pod: podName,
+            service: serviceName || undefined,
+            localPort: data?.port || port,
+            targetPort: numericContainerPort,
+            address,
+          },
+        });
 
         const portForwardsInStorage = localStorage.getItem(PORT_FORWARDS_STORAGE_KEY);
         const parsedPortForwards = JSON.parse(portForwardsInStorage || '[]');
@@ -309,6 +333,28 @@ function PortForwardContent(props: PortForwardProps) {
       .then(() => {
         portForward.status = PORT_FORWARD_STOP_STATUS;
         setPortForward(portForward);
+        void emitAuditEvent({
+          source: 'headlamp',
+          event_type: 'ui_action',
+          action: 'stop_port_forward',
+          cluster,
+          namespace,
+          resource: resource
+            ? {
+                kind: resource.kind,
+                name,
+                cluster,
+                namespace,
+              }
+            : undefined,
+          result: PORT_FORWARD_STOP_STATUS,
+          extra: {
+            pod: displayPodName || undefined,
+            service: !isPod ? name : undefined,
+            localPort: portForward.port,
+            targetPort: numericContainerPort,
+          },
+        });
       })
       .catch(error => {
         setError(error?.message);

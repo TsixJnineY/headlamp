@@ -27,6 +27,7 @@ import _ from 'lodash';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useParams } from 'react-router-dom';
+import { createAuditSessionId } from '../../features/audit/session';
 import { getDefaultContainer } from '../../helpers/podContainer';
 import { KubeContainerStatus } from '../../lib/k8s/cluster';
 import Pod from '../../lib/k8s/pod';
@@ -517,6 +518,7 @@ export default function PodDetails(props: PodDetailsProps) {
       dispatchHeadlampEvent({
         type: HeadlampEventType.LOGS,
         data: {
+          resource: item,
           status: EventStatus.OPENED,
         },
       });
@@ -527,6 +529,7 @@ export default function PodDetails(props: PodDetailsProps) {
   const launchTerminal = React.useCallback(
     (item: Pod) => {
       const activityId = 'terminal-' + item.metadata.uid;
+      const sessionId = createAuditSessionId('exec');
       Activity.launch({
         id: activityId,
         title: item.metadata.name,
@@ -538,6 +541,7 @@ export default function PodDetails(props: PodDetailsProps) {
             noDialog
             open
             item={item}
+            sessionId={sessionId}
             onClose={() => Activity.close(activityId)}
             isAttach={false}
           />
@@ -547,6 +551,7 @@ export default function PodDetails(props: PodDetailsProps) {
         type: HeadlampEventType.TERMINAL,
         data: {
           resource: item,
+          session_id: sessionId,
           status: EventStatus.OPENED,
         },
       });
@@ -725,20 +730,32 @@ export default function PodDetails(props: PodDetailsProps) {
                   description={t('Attach')}
                   icon="mdi:connection"
                   onClick={() => {
+                    const activityId = 'attach-' + item.metadata.uid;
+                    const sessionId = createAuditSessionId('attach');
                     dispatchHeadlampEvent({
                       type: HeadlampEventType.POD_ATTACH,
                       data: {
                         resource: item,
+                        session_id: sessionId,
                         status: EventStatus.OPENED,
                       },
                     });
                     Activity.launch({
-                      id: 'attach-' + item.metadata.uid,
+                      id: activityId,
                       title: item.metadata.name,
                       cluster: item.cluster,
                       icon: <Icon icon="mdi:console" width="100%" height="100%" />,
                       location: 'full',
-                      content: <Terminal noDialog open item={item} onClose={() => {}} isAttach />,
+                      content: (
+                        <Terminal
+                          noDialog
+                          open
+                          item={item}
+                          sessionId={sessionId}
+                          onClose={() => Activity.close(activityId)}
+                          isAttach
+                        />
+                      ),
                     });
                   }}
                 />

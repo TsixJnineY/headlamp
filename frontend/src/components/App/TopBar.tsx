@@ -33,6 +33,7 @@ import React, { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useHistory } from 'react-router-dom';
+import { emitAuditEvent } from '../../features/audit/emitter';
 import { getProductName, getVersion } from '../../helpers/getProductInfo';
 import { logout } from '../../lib/auth';
 import { useCluster, useClustersConf, useSelectedClusters } from '../../lib/k8s';
@@ -119,15 +120,33 @@ export default function TopBar({}: TopBarProps) {
   const logoutCallback = useCallback(
     async (clusterToLogout?: string) => {
       if (clusterToLogout) {
+        void emitAuditEvent({
+          source: 'headlamp',
+          event_type: 'ui_action',
+          action: 'logout',
+          cluster: clusterToLogout,
+        });
         await logout(clusterToLogout);
       } else {
         if (selectedClusters.length > 0) {
           await Promise.all(
             selectedClusters.map(async c => {
+              void emitAuditEvent({
+                source: 'headlamp',
+                event_type: 'ui_action',
+                action: 'logout',
+                cluster: c,
+              });
               await logout(c);
             })
           );
         } else if (cluster) {
+          void emitAuditEvent({
+            source: 'headlamp',
+            event_type: 'ui_action',
+            action: 'logout',
+            cluster,
+          });
           await logout(cluster);
         }
       }
