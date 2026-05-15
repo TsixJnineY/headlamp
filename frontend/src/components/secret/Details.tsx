@@ -22,10 +22,9 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
-import { emitAuditEvent } from '../../features/audit/emitter';
-import { toAuditResource } from '../../features/audit/resourceAudit';
 import Secret from '../../lib/k8s/secret';
 import { clusterAction } from '../../redux/clusterActionSlice';
+import { EventStatus, HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { AppDispatch } from '../../redux/stores/store';
 import EmptyContent from '../common/EmptyContent';
 import { DetailsGrid, SecretField } from '../common/Resource';
@@ -40,6 +39,7 @@ interface SecretDataSectionProps {
 function SecretDataSection({ item }: SecretDataSectionProps) {
   const { t } = useTranslation();
   const dispatch: AppDispatch = useDispatch();
+  const dispatchEditResourceEvent = useEventCallback(HeadlampEventType.EDIT_RESOURCE);
 
   const [data, setData] = React.useState<Record<string, string>>(() =>
     _.cloneDeep(item.data || {})
@@ -66,15 +66,14 @@ function SecretDataSection({ item }: SecretDataSectionProps) {
   const handleSave = () => {
     const updatedSecret = { ...item.jsonData, data };
     const keys = Object.keys(data || {});
-    void emitAuditEvent({
-      source: 'headlamp',
-      event_type: 'ui_action',
-      action: 'save_secret_inline',
-      cluster: item.cluster,
-      namespace: item.metadata.namespace,
-      resource: toAuditResource(item),
-      result: 'requested',
-      extra: {
+    dispatchEditResourceEvent({
+      resource: item,
+      status: EventStatus.CONFIRMED,
+      details: {
+        action: 'save_secret_inline',
+        edit_mode: 'inline',
+        source: 'secret_details',
+        result: 'requested',
         keys,
         key_count: keys.length,
       },

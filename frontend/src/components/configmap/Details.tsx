@@ -21,10 +21,9 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
-import { emitAuditEvent } from '../../features/audit/emitter';
-import { toAuditResource } from '../../features/audit/resourceAudit';
 import ConfigMap from '../../lib/k8s/configMap';
 import { clusterAction } from '../../redux/clusterActionSlice';
+import { EventStatus, HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { AppDispatch } from '../../redux/stores/store';
 import EmptyContent from '../common/EmptyContent';
 import { DataField, DetailsGrid } from '../common/Resource';
@@ -34,6 +33,7 @@ import { NameValueTable, NameValueTableRow } from '../common/SimpleTable';
 function ConfigMapDataSection({ item }: { item: ConfigMap }) {
   const { t } = useTranslation(['translation']);
   const dispatch: AppDispatch = useDispatch();
+  const dispatchEditResourceEvent = useEventCallback(HeadlampEventType.EDIT_RESOURCE);
 
   const [data, setData] = React.useState(() => _.cloneDeep(item.data));
   const [isDirty, setIsDirty] = React.useState(false);
@@ -55,15 +55,14 @@ function ConfigMapDataSection({ item }: { item: ConfigMap }) {
   const handleSave = () => {
     const updatedConfigMap = { ...item.jsonData, data };
     const keys = Object.keys(data || {});
-    void emitAuditEvent({
-      source: 'headlamp',
-      event_type: 'ui_action',
-      action: 'save_configmap_inline',
-      cluster: item.cluster,
-      namespace: item.metadata.namespace,
-      resource: toAuditResource(item),
-      result: 'requested',
-      extra: {
+    dispatchEditResourceEvent({
+      resource: item,
+      status: EventStatus.CONFIRMED,
+      details: {
+        action: 'save_configmap_inline',
+        edit_mode: 'inline',
+        source: 'configmap_details',
+        result: 'requested',
         keys,
         key_count: keys.length,
       },

@@ -27,8 +27,6 @@ import { Terminal as XTerminal } from '@xterm/xterm';
 import { useSnackbar } from 'notistack';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { emitAuditEvent } from '../../../features/audit/emitter';
-import { toAuditResource } from '../../../features/audit/resourceAudit';
 import { labelSelectorToQuery } from '../../../lib/k8s';
 import { clusterFetch } from '../../../lib/k8s/api/v2/fetch';
 import { makeUrl } from '../../../lib/k8s/api/v2/makeUrl';
@@ -62,6 +60,7 @@ const PaddedFormControlLabel = styled(FormControlLabel)(({ theme }) => ({
 }));
 
 function LogsButtonContent({ item }: LogsButtonProps) {
+  const dispatchHeadlampEvent = useEventCallback(HeadlampEventType.LOGS);
   const [pods, setPods] = useState<Pod[]>([]);
   const [selectedPodIndex, setSelectedPodIndex] = useState<number | 'all'>('all');
   const [selectedContainer, setSelectedContainer] = useState('');
@@ -527,13 +526,9 @@ function LogsButtonContent({ item }: LogsButtonProps) {
       }`}
       open
       onClose={() =>
-        emitAuditEvent({
-          source: 'headlamp',
-          event_type: 'ui_action',
-          action: 'close_logs',
-          cluster: item?.cluster,
-          namespace: item?.metadata?.namespace,
-          resource: toAuditResource(item),
+        dispatchHeadlampEvent({
+          resource: item || undefined,
+          status: EventStatus.CLOSED,
         })
       }
       logs={logs.logs}

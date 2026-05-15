@@ -422,6 +422,7 @@ func flagset() *flag.FlagSet {
 
 	addGeneralFlags(f)
 	addOIDCFlags(f)
+	addAuditFlags(f)
 	addTelemetryFlags(f)
 	addTLSFlags(f)
 
@@ -471,9 +472,6 @@ func addOIDCFlags(f *flag.FlagSet) {
 	f.Bool("oidc-use-access-token", false, "Setup oidc to pass through the access_token instead of the default id_token")
 	f.Bool("oidc-use-cookie", false, "Enable OIDC cookie usage even when not running in-cluster")
 	f.Bool("oidc-use-pkce", false, "Use PKCE (Proof Key for Code Exchange) for enhanced security in OIDC flow")
-	f.Bool("audit-enabled", false, "Enable Headlamp audit event ingestion and JSON audit log output")
-	f.Bool("audit-log-ui-actions", true, "Emit JSON audit logs for Headlamp UI action events")
-	f.Bool("audit-log-terminal-input", false, "Emit JSON audit logs for terminal input events")
 	f.String("me-username-path", DefaultMeUsernamePath,
 		"Comma separated JMESPath expressions used to read username from the JWT payload")
 	f.String("me-email-path", DefaultMeEmailPath,
@@ -482,6 +480,12 @@ func addOIDCFlags(f *flag.FlagSet) {
 		"Comma separated JMESPath expressions used to read groups from the JWT payload")
 	f.String("me-user-info-url", DefaultMeUserInfoURL,
 		"URL to fetch additional user info for the /me endpoint. For oauth2proxy /oauth2/userinfo can be used.")
+}
+
+func addAuditFlags(f *flag.FlagSet) {
+	f.Bool("audit-enabled", false, "Enable Headlamp audit event ingestion and JSON audit log output")
+	f.Bool("audit-log-ui-actions", true, "Emit JSON audit logs for Headlamp UI action events")
+	f.Bool("audit-log-terminal-input", false, "Emit JSON audit logs for terminal input events")
 }
 
 func addTelemetryFlags(f *flag.FlagSet) {

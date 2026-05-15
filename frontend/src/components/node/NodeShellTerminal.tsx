@@ -18,7 +18,6 @@ import Box from '@mui/material/Box';
 import DialogContent from '@mui/material/DialogContent';
 import _ from 'lodash';
 import { useEffect, useRef, useState } from 'react';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { createAuditSessionId } from '../../features/audit/session';
 import {
   createTerminalInputCollector,
@@ -35,6 +34,7 @@ import { stream, StreamResultsCb } from '../../lib/k8s/api/v1/streamingApi';
 import Node from '../../lib/k8s/node';
 import { KubePod } from '../../lib/k8s/pod';
 import { Channel, useTerminalStream, XTerminalConnected } from '../../lib/k8s/useTerminalStream';
+import { EventStatus, HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 
 interface NodeShellTerminalProps {
   item: Node;
@@ -143,11 +143,13 @@ async function shell(item: Node, onExec: StreamResultsCb) {
 
 export function NodeShellTerminal(props: NodeShellTerminalProps) {
   const { item, onClose, sessionId } = props;
+  const dispatchNodeShellTerminal = useEventCallback(HeadlampEventType.NODE_SHELL_TERMINAL);
   const [terminalContainerRef, setTerminalContainerRef] = useState<HTMLElement | null>(null);
   const exitSentRef = useRef(false);
   const pendingExitRef = useRef(false);
   const auditSessionIdRef = useRef(sessionId || createAuditSessionId('node-shell'));
   const debugPodRef = useRef<{ namespace?: string; pod?: string }>({});
+  // The collector reads debugPodRef lazily at flush time, after the debug pod is created.
   const terminalAuditRef = useRef<TerminalInputCollector>(
     createTerminalInputCollector(() => ({
       cluster: item.cluster || undefined,
@@ -223,21 +225,18 @@ export function NodeShellTerminal(props: NodeShellTerminalProps) {
 
   function wrappedOnClose() {
     terminalAuditRef.current.flush();
-    void emitAuditEvent({
-      source: 'headlamp',
-      event_type: 'ui_action',
-      action: 'close_node_shell_terminal',
+    dispatchNodeShellTerminal({
       cluster: item.cluster || undefined,
       namespace: debugPodRef.current.namespace,
-      pod: debugPodRef.current.pod,
       session_id: auditSessionIdRef.current,
-      container: 'debugger',
       resource: {
         kind: 'Node',
         name: item.metadata.name,
         cluster: item.cluster || undefined,
+        container: 'debugger',
       },
-      extra: {
+      status: EventStatus.CLOSED,
+      details: {
         mode: 'node-shell',
         target_kind: 'Node',
         target_name: item.metadata.name,

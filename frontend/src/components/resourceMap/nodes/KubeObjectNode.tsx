@@ -20,8 +20,7 @@ import { styled } from '@mui/material/styles';
 import { alpha } from '@mui/system/colorManipulator';
 import { Handle, NodeProps, Position } from '@xyflow/react';
 import { memo, useEffect, useState } from 'react';
-import { emitAuditEvent } from '../../../features/audit/emitter';
-import { toAuditResource } from '../../../features/audit/resourceAudit';
+import { HeadlampEventType, useEventCallback } from '../../../redux/headlampEventSlice';
 import { Activity } from '../../activity/Activity';
 import { GraphNodeDetails } from '../details/GraphNodeDetails';
 import { getMainNode } from '../graph/graphGrouping';
@@ -149,6 +148,7 @@ export const KubeObjectNodeComponent = memo(({ id }: NodeProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const theme = useTheme();
   const graph = useGraphView();
+  const dispatchOpenResourceDrawer = useEventCallback(HeadlampEventType.OPEN_RESOURCE_DRAWER);
 
   const mainNode = node?.nodes ? getMainNode(node.nodes) : undefined;
   const kubeObject = node?.kubeObject ?? mainNode?.kubeObject;
@@ -209,13 +209,10 @@ export const KubeObjectNodeComponent = memo(({ id }: NodeProps) => {
     if (!hasContent) return;
 
     if (node.kubeObject) {
-      emitAuditEvent({
-        source: 'headlamp',
-        event_type: 'ui_action',
-        action: 'details_view',
+      dispatchOpenResourceDrawer({
         cluster: node.kubeObject.cluster,
         namespace: node.kubeObject.metadata?.namespace,
-        resource: toAuditResource(node.kubeObject),
+        resource: node.kubeObject,
       });
     }
 

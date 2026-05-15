@@ -24,8 +24,6 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
-import { emitAuditEvent } from '../../features/audit/emitter';
-import { toAuditResource } from '../../features/audit/resourceAudit';
 import { apply } from '../../lib/k8s/api/v1/apply';
 import { drainNode, drainNodeStatus } from '../../lib/k8s/api/v1/drainNode';
 import type { ApiError } from '../../lib/k8s/api/v2/ApiError';
@@ -38,6 +36,7 @@ import * as units from '../../lib/units';
 import { getCluster, timeAgo } from '../../lib/util';
 import { DefaultHeaderAction } from '../../redux/actionButtonsSlice';
 import { clusterAction } from '../../redux/clusterActionSlice';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { AppDispatch } from '../../redux/stores/store';
 import {
   CpuCircularChart,
@@ -72,6 +71,9 @@ export default function NodeDetails(props: { name?: string; cluster?: string }) 
   const { name = params.name, cluster } = props;
   const { t } = useTranslation(['glossary']);
   const dispatch: AppDispatch = useDispatch();
+  const dispatchCordonNode = useEventCallback(HeadlampEventType.CORDON_NODE);
+  const dispatchUncordonNode = useEventCallback(HeadlampEventType.UNCORDON_NODE);
+  const dispatchDrainNode = useEventCallback(HeadlampEventType.DRAIN_NODE);
 
   const { enqueueSnackbar } = useSnackbar();
   const [nodeMetrics, metricsError] = Node.useMetrics();
@@ -109,14 +111,12 @@ export default function NodeDetails(props: { name?: string; cluster?: string }) 
     const cloneNode = _.cloneDeep(node);
 
     cloneNode.spec.unschedulable = !cordon;
-    void emitAuditEvent({
-      source: 'headlamp',
-      event_type: 'ui_action',
-      action: cordon ? 'uncordon_node' : 'cordon_node',
+    const dispatchNodeScheduleEvent = cordon ? dispatchUncordonNode : dispatchCordonNode;
+    dispatchNodeScheduleEvent({
       cluster: node.cluster || getCluster() || undefined,
-      resource: toAuditResource(node),
+      resource: node,
       result: 'requested',
-      extra: {
+      details: {
         previous_unschedulable: Boolean(cordon),
         desired_unschedulable: !cordon,
       },
@@ -185,14 +185,11 @@ export default function NodeDetails(props: { name?: string; cluster?: string }) 
     const cluster = getCluster();
     if (!cluster) return;
 
-    void emitAuditEvent({
-      source: 'headlamp',
-      event_type: 'ui_action',
-      action: 'drain_node',
+    dispatchDrainNode({
       cluster,
-      resource: toAuditResource(node),
+      resource: node,
       result: 'requested',
-      extra: {
+      details: {
         node: node.metadata.name,
       },
     });

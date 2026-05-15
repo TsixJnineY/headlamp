@@ -15,12 +15,12 @@
  */
 
 import { useTranslation } from 'react-i18next';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { createAuditSessionId } from '../../features/audit/session';
 import { DEFAULT_NODE_SHELL_NAMESPACE, loadClusterSettings } from '../../helpers/clusterSettings';
 import { getCluster } from '../../lib/cluster';
 import Node from '../../lib/k8s/node';
 import Pod from '../../lib/k8s/pod';
+import { EventStatus, HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { Activity } from '../activity/Activity';
 import ActionButton from '../common/ActionButton';
 import { AuthVisible } from '../common/Resource';
@@ -49,6 +49,7 @@ function nodeTerminalNamespace(cluster: string | null) {
 export function NodeShellAction(props: NodeShellTerminalProps) {
   const { item } = props;
   const { t } = useTranslation(['glossary']);
+  const dispatchNodeShellTerminal = useEventCallback(HeadlampEventType.NODE_SHELL_TERMINAL);
   if (item === null) {
     return <></>;
   }
@@ -77,16 +78,15 @@ export function NodeShellAction(props: NodeShellTerminalProps) {
             icon="mdi:bug"
             onClick={() => {
               const sessionId = createAuditSessionId('node-shell');
-              void emitAuditEvent({
-                source: 'headlamp',
-                event_type: 'ui_action',
-                action: 'open_node_shell_terminal',
+              dispatchNodeShellTerminal({
                 cluster: item.cluster || undefined,
                 session_id: sessionId,
                 resource: {
                   kind: 'Node',
                   name: item.metadata.name,
+                  cluster: item.cluster || undefined,
                 },
+                status: EventStatus.OPENED,
               });
 
               Activity.launch({

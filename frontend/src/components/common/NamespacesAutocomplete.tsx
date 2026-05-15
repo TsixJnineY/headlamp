@@ -27,11 +27,11 @@ import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useHistory, useLocation } from 'react-router-dom';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { loadClusterSettings } from '../../helpers/clusterSettings';
 import { useCluster, useClustersConf } from '../../lib/k8s';
 import Namespace from '../../lib/k8s/namespace';
 import { setNamespaceFilter } from '../../redux/filterSlice';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { useTypedSelector } from '../../redux/hooks';
 
 /**
@@ -200,6 +200,7 @@ export function NamespacesAutocomplete() {
   const dispatch = useDispatch();
   const filter = useTypedSelector(state => state.filter);
   const cluster = useCluster();
+  const dispatchSwitchNamespace = useEventCallback(HeadlampEventType.SWITCH_NAMESPACE);
   const [namespaceNames, setNamespaceNames] = React.useState<string[]>([]);
 
   React.useEffect(() => {
@@ -213,12 +214,9 @@ export function NamespacesAutocomplete() {
   const onChange = (event: React.ChangeEvent<{}>, newValue: string[]) => {
     addQuery({ namespace: newValue.join(' ') }, { namespace: '' }, history, location, '');
     dispatch(setNamespaceFilter(newValue));
-    void emitAuditEvent({
-      source: 'headlamp',
-      event_type: 'ui_action',
-      action: 'switch_namespace',
+    dispatchSwitchNamespace({
       cluster: cluster || undefined,
-      extra: {
+      details: {
         namespaces: newValue,
       },
     });

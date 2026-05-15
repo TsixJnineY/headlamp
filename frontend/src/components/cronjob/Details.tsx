@@ -28,12 +28,12 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { toAuditResource } from '../../features/audit/resourceAudit';
 import { apply } from '../../lib/k8s/api/v1/apply';
 import CronJob from '../../lib/k8s/cronJob';
 import Job from '../../lib/k8s/job';
 import { clusterAction } from '../../redux/clusterActionSlice';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { AppDispatch } from '../../redux/stores/store';
 import ActionButton from '../common/ActionButton';
 import { DetailsGrid } from '../common/Resource';
@@ -54,6 +54,7 @@ function SpawnJobDialog(props: { cronJob: CronJob; onClose: () => void }) {
   const { cronJob, onClose } = props;
   const { t } = useTranslation(['translation']);
   const dispatch: AppDispatch = useDispatch();
+  const dispatchTriggerCronJob = useEventCallback(HeadlampEventType.TRIGGER_CRONJOB);
 
   const suffix = `-manual-spawn-${uniqueString()}`;
 
@@ -85,15 +86,12 @@ function SpawnJobDialog(props: { cronJob: CronJob; onClose: () => void }) {
         },
       ];
     }
-    emitAuditEvent({
-      source: 'headlamp',
-      event_type: 'ui_action',
-      action: 'spawn_cronjob_job',
+    dispatchTriggerCronJob({
       cluster: cronJob.cluster,
       namespace: cronJob.metadata.namespace,
-      resource: toAuditResource(cronJob),
+      resource: cronJob,
       result: 'requested',
-      extra: {
+      details: {
         job_name: jobName,
         spawned_resource: toAuditResource({
           kind: 'Job',
@@ -171,6 +169,7 @@ export default function CronJobDetails(props: {
   const { items: jobs, errors } = Job.useList({ namespace, cluster: cronJob?.cluster });
   const [isSpawnDialogOpen, setIsSpawnDialogOpen] = useState(false);
   const [isPendingSuspend, setIsPendingSuspend] = useState(false);
+  const dispatchTriggerCronJob = useEventCallback(HeadlampEventType.TRIGGER_CRONJOB);
   const isCronSuspended = cronJob?.spec?.suspend ?? false;
 
   const ownedJobs = useMemo(
@@ -183,15 +182,12 @@ export default function CronJobDetails(props: {
 
   function applySuspend(cronJob: CronJob, suspend: boolean) {
     setIsPendingSuspend(true);
-    emitAuditEvent({
-      source: 'headlamp',
-      event_type: 'ui_action',
-      action: suspend ? 'suspend_cronjob' : 'resume_cronjob',
+    dispatchTriggerCronJob({
       cluster: cronJob.cluster,
       namespace: cronJob.metadata.namespace,
-      resource: toAuditResource(cronJob),
+      resource: cronJob,
       result: 'requested',
-      extra: {
+      details: {
         desired_suspend: suspend,
       },
     });

@@ -1,7 +1,9 @@
 import { defineConfig } from '@rsbuild/core';
 import { pluginReact } from '@rsbuild/plugin-react';
 import { pluginSvgr } from '@rsbuild/plugin-svgr';
-import { pluginNodePolyfill } from '@rsbuild/plugin-node-polyfill';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 // Dynamically inject REACT_APP_ environment variables
 const reactAppEnvVars = Object.entries(process.env)
@@ -69,6 +71,16 @@ export default defineConfig({
   },
   tools: {
     rspack: {
+      resolve: {
+        fallback: {
+          buffer: require.resolve('buffer/'),
+          events: require.resolve('events/'),
+          path: require.resolve('path-browserify'),
+          process: require.resolve('process/browser'),
+          stream: require.resolve('stream-browserify'),
+          util: require.resolve('util/'),
+        },
+      },
       module: {
         rules: [
           {
@@ -129,9 +141,6 @@ export default defineConfig({
         ref: true,
         // support svg with namespace
       },
-    }),
-    pluginNodePolyfill({
-      include: ['process', 'buffer', 'stream', 'https', 'http', 'require', 'path'],
     }),
     // replaceBaseUrlPlugin(),
   ],

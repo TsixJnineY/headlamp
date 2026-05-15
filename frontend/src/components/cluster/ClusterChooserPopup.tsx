@@ -29,7 +29,6 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { generatePath } from 'react-router';
 import { useHistory } from 'react-router-dom';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { getClusterAppearanceFromMeta } from '../../helpers/clusterAppearance';
 import { isElectron } from '../../helpers/isElectron';
 import { getRecentClusters, setRecentCluster } from '../../helpers/recentClusters';
@@ -37,6 +36,7 @@ import { useClustersConf, useSelectedClusters } from '../../lib/k8s';
 import { Cluster } from '../../lib/k8s/cluster';
 import { createRouteURL } from '../../lib/router/createRouteURL';
 import { getCluster, getClusterPrefixedPath } from '../../lib/util';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import ClusterBadge from '../Sidebar/ClusterBadge';
 
 function ClusterListItem(props: { cluster: Cluster; onClick: () => void; selected?: boolean }) {
@@ -91,6 +91,7 @@ function ClusterChooserPopup(props: ChooserPopupPros) {
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const [activeDescendantIndex, setActiveDescendantIndex] = React.useState<number>(-1);
+  const dispatchSwitchCluster = useEventCallback(HeadlampEventType.SWITCH_CLUSTER);
 
   const focusedRef = React.useCallback((node: HTMLElement) => {
     if (node !== null) {
@@ -163,12 +164,9 @@ function ClusterChooserPopup(props: ChooserPopupPros) {
     handleClose();
 
     if (cluster.name !== getCluster()) {
-      void emitAuditEvent({
-        source: 'headlamp',
-        event_type: 'ui_action',
-        action: 'switch_cluster',
+      dispatchSwitchCluster({
         cluster: cluster.name,
-        extra: {
+        details: {
           previousCluster: getCluster() || undefined,
           targetCluster: cluster.name,
         },

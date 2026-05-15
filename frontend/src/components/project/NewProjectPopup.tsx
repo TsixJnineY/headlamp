@@ -32,13 +32,13 @@ import { uniq } from 'lodash';
 import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { useHistory } from 'react-router';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { useClustersConf } from '../../lib/k8s';
 import { apply } from '../../lib/k8s/api/v1/apply';
 import { ApiError } from '../../lib/k8s/api/v2/ApiError';
 import { KubeObjectInterface } from '../../lib/k8s/KubeObject';
 import Namespace from '../../lib/k8s/namespace';
 import { createRouteURL } from '../../lib/router/createRouteURL';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { useTypedSelector } from '../../redux/hooks';
 import { PROJECT_ID_LABEL, toKubernetesName } from './projectUtils';
 /**
@@ -106,6 +106,7 @@ function ProjectTypeButton({
 function ProjectFromExistingNamespace({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
   const history = useHistory();
+  const dispatchCreateProject = useEventCallback(HeadlampEventType.CREATE_PROJECT);
 
   const [projectName, setProjectName] = useState('');
   const [selectedClusters, setSelectedClusters] = useState<string[]>([]);
@@ -186,10 +187,7 @@ function ProjectFromExistingNamespace({ onBack }: { onBack: () => void }) {
           ? 'label_existing_namespace'
           : 'create_namespace';
 
-        void emitAuditEvent({
-          source: 'headlamp',
-          event_type: 'ui_action',
-          action: 'create_project',
+        dispatchCreateProject({
           cluster,
           namespace: effectiveNamespace,
           resource: {
@@ -198,7 +196,7 @@ function ProjectFromExistingNamespace({ onBack }: { onBack: () => void }) {
             cluster,
           },
           result: 'requested',
-          extra: {
+          details: {
             project_id: projectName,
             namespace_action: namespaceAction,
             existing_namespace_clusters: clustersWithExistingNamespace,

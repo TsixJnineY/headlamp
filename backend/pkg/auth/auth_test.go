@@ -1003,6 +1003,35 @@ func TestHandleMe_ExpiredToken(t *testing.T) {
 	assert.Equal(t, "Cookie", rr.Header().Get("Vary"))
 }
 
+func TestHandleMe_OpaqueToken(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/clusters/test/me", nil)
+	req = mux.SetURLVars(req, map[string]string{"clusterName": "test"})
+	req.AddCookie(&http.Cookie{
+		Name:  fmt.Sprintf("headlamp-auth-%s.0", auth.SanitizeClusterName("test")),
+		Value: "opaque-token",
+	})
+
+	rr := httptest.NewRecorder()
+
+	handler := auth.HandleMe(auth.MeHandlerOptions{})
+
+	handler(rr, req)
+
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
+
+	var got struct {
+		Message string `json:"message"`
+	}
+
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
+	assert.Equal(t, "invalid token", got.Message)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	assert.Equal(t, "no-store, no-cache, must-revalidate, private", rr.Header().Get("Cache-Control"))
+	assert.Equal(t, "Cookie", rr.Header().Get("Vary"))
+}
+
 func TestHandleMe_MissingCookie(t *testing.T) {
 	t.Parallel()
 

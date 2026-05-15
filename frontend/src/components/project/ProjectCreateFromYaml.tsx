@@ -35,7 +35,6 @@ import { Dispatch, FormEvent, SetStateAction, useMemo, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Trans, useTranslation } from 'react-i18next';
 import { Redirect, useHistory } from 'react-router';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { toAuditResource } from '../../features/audit/resourceAudit';
 import { useClustersConf } from '../../lib/k8s';
 import { apply } from '../../lib/k8s/api/v1/apply';
@@ -43,6 +42,7 @@ import { ApiError } from '../../lib/k8s/api/v2/ApiError';
 import { KubeObjectInterface } from '../../lib/k8s/KubeObject';
 import Namespace from '../../lib/k8s/namespace';
 import { createRouteURL } from '../../lib/router/createRouteURL';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { ViewYaml } from '../advancedSearch/ResourceSearch';
 import { DropZoneBox } from '../common/DropZoneBox';
 import Table from '../common/Table';
@@ -54,11 +54,13 @@ async function createProjectFromYaml({
   k8sName,
   cluster,
   setCreationState,
+  dispatchCreateProject,
 }: {
   items: KubeObjectInterface[];
   k8sName: string;
   cluster: string;
   setCreationState: Dispatch<SetStateAction<CreationState>>;
+  dispatchCreateProject: ReturnType<typeof useEventCallback>;
 }) {
   const itemsToCreate = structuredClone(items);
 
@@ -86,20 +88,20 @@ async function createProjectFromYaml({
   const auditResources = [
     { ...namespace, cluster },
     ...itemsToCreate.map(item => ({ ...item, cluster })),
-  ].map(item => toAuditResource(item));
+  ]
+    .map(item => toAuditResource(item))
+    .filter(Boolean);
 
-  void emitAuditEvent({
-    source: 'headlamp',
-    event_type: 'ui_action',
-    action: 'create_project_from_yaml',
+  dispatchCreateProject({
     cluster,
     namespace: k8sName,
     resource: auditResources[0],
+    resources: auditResources,
     result: 'requested',
-    extra: {
+    details: {
+      from_yaml: true,
       project_id: k8sName,
       resource_count: auditResources.length,
-      resources: auditResources,
     },
   });
 
@@ -139,6 +141,7 @@ export function CreateNew() {
   const [selectedClusters, setSelectedClusters] = useState<string | null>(null);
   const k8sName = toKubernetesName(name);
   const history = useHistory();
+  const dispatchCreateProject = useEventCallback(HeadlampEventType.CREATE_PROJECT);
 
   const [creationState, setCreationState] = useState<CreationState>({
     stage: 'form',
@@ -294,6 +297,7 @@ export function CreateNew() {
         k8sName,
         cluster: selectedClusters!,
         setCreationState,
+        dispatchCreateProject,
       });
       history.push(createRouteURL('projectDetails', { name: k8sName }));
     } catch (e) {

@@ -33,7 +33,6 @@ import React, { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { useHistory } from 'react-router-dom';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { getProductName, getVersion } from '../../helpers/getProductInfo';
 import { logout } from '../../lib/auth';
 import { useCluster, useClustersConf, useSelectedClusters } from '../../lib/k8s';
@@ -45,6 +44,7 @@ import {
   AppBarActionType,
   DefaultAppBarAction,
 } from '../../redux/actionButtonsSlice';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { useTypedSelector } from '../../redux/hooks';
 import { uiSlice } from '../../redux/uiSlice';
 import { SettingsButton } from '../App/Settings';
@@ -115,47 +115,36 @@ export default function TopBar({}: TopBarProps) {
   const selectedClusters = useSelectedClusters();
   const history = useHistory();
   const { appBarActions, appBarActionsProcessors } = useAppBarActionsProcessed();
+  const dispatchLogoutEvent = useEventCallback(HeadlampEventType.LOGOUT);
 
   // The logout callback
   const logoutCallback = useCallback(
     async (clusterToLogout?: string) => {
-      if (clusterToLogout) {
-        void emitAuditEvent({
-          source: 'headlamp',
-          event_type: 'ui_action',
-          action: 'logout',
-          cluster: clusterToLogout,
+      const clustersToLogout = clusterToLogout
+        ? [clusterToLogout]
+        : selectedClusters.length > 0
+        ? selectedClusters
+        : cluster
+        ? [cluster]
+        : [];
+
+      clustersToLogout.forEach(clusterName => {
+        dispatchLogoutEvent({
+          cluster: clusterName,
         });
-        await logout(clusterToLogout);
-      } else {
-        if (selectedClusters.length > 0) {
-          await Promise.all(
-            selectedClusters.map(async c => {
-              void emitAuditEvent({
-                source: 'headlamp',
-                event_type: 'ui_action',
-                action: 'logout',
-                cluster: c,
-              });
-              await logout(c);
-            })
-          );
-        } else if (cluster) {
-          void emitAuditEvent({
-            source: 'headlamp',
-            event_type: 'ui_action',
-            action: 'logout',
-            cluster,
-          });
-          await logout(cluster);
-        }
+      });
+
+      if (clustersToLogout.length > 1) {
+        await Promise.all(clustersToLogout.map(clusterName => logout(clusterName)));
+      } else if (clustersToLogout.length === 1) {
+        await logout(clustersToLogout[0]);
       }
 
       handleLogoutPathUpdate(clusterToLogout, history.location.pathname, (path: string) =>
         history.push(path)
       );
     },
-    [cluster, selectedClusters, history]
+    [cluster, dispatchLogoutEvent, selectedClusters, history]
   );
 
   const handletoggleOpen = useCallback(() => {

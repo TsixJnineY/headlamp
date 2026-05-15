@@ -38,7 +38,6 @@ import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { generatePath } from 'react-router';
 import { useHistory } from 'react-router-dom';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { getClusterAppearanceFromMeta } from '../../helpers/clusterAppearance';
 import { isElectron } from '../../helpers/isElectron';
 import { getRecentClusters, setRecentCluster } from '../../helpers/recentClusters';
@@ -47,6 +46,7 @@ import { Cluster } from '../../lib/k8s/cluster';
 import { createRouteURL } from '../../lib/router/createRouteURL';
 import { useShortcut } from '../../lib/useShortcut';
 import { getCluster, getClusterPrefixedPath } from '../../lib/util';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { useTypedSelector } from '../../redux/hooks';
 import { uiSlice } from '../../redux/uiSlice';
 import { AppLogo } from '../App/AppLogo';
@@ -375,6 +375,7 @@ function Chooser(props: ClusterDialogProps) {
   // Only used if open is not provided
   const [show, setShow] = React.useState(props.open);
   const { t } = useTranslation();
+  const dispatchSwitchCluster = useEventCallback(HeadlampEventType.SWITCH_CLUSTER);
 
   React.useEffect(
     () => {
@@ -395,12 +396,9 @@ function Chooser(props: ClusterDialogProps) {
 
   function handleButtonClick(cluster: Cluster) {
     if (cluster.name !== getCluster()) {
-      void emitAuditEvent({
-        source: 'headlamp',
-        event_type: 'ui_action',
-        action: 'switch_cluster',
+      dispatchSwitchCluster({
         cluster: cluster.name,
-        extra: {
+        details: {
           previousCluster: getCluster() || undefined,
           targetCluster: cluster.name,
         },

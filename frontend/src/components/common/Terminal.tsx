@@ -27,7 +27,6 @@ import { Terminal as XTerminal } from '@xterm/xterm';
 import _ from 'lodash';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { createAuditSessionId } from '../../features/audit/session';
 import {
   createTerminalInputCollector,
@@ -35,6 +34,7 @@ import {
 } from '../../features/audit/terminalAudit';
 import { getDefaultContainer } from '../../helpers/podContainer';
 import Pod from '../../lib/k8s/pod';
+import { EventStatus, HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { Dialog } from './Dialog';
 
 const decoder = new TextDecoder('utf-8');
@@ -67,6 +67,8 @@ type execReturn = ReturnType<Pod['exec']>;
 
 export default function Terminal(props: TerminalProps) {
   const { item, onClose, isAttach, noDialog, sessionId, ...other } = props;
+  const dispatchTerminalEvent = useEventCallback(HeadlampEventType.TERMINAL);
+  const dispatchPodAttachEvent = useEventCallback(HeadlampEventType.POD_ATTACH);
   const [terminalContainerRef, setTerminalContainerRef] = React.useState<HTMLElement | null>(null);
   const [container, setContainer] = useState<string | null>(() => getDefaultContainer(item));
   const execOrAttachRef = React.useRef<execReturn | null>(null);
@@ -379,13 +381,10 @@ export default function Terminal(props: TerminalProps) {
 
   React.useEffect(() => {
     return () => {
-      void emitAuditEvent({
-        source: 'headlamp',
-        event_type: 'ui_action',
-        action:
-          currentSessionKindRef.current === 'attach'
-            ? 'close_attach_terminal'
-            : 'close_exec_terminal',
+      const dispatchTerminalCloseEvent =
+        currentSessionKindRef.current === 'attach' ? dispatchPodAttachEvent : dispatchTerminalEvent;
+
+      dispatchTerminalCloseEvent({
         cluster: item.cluster || undefined,
         namespace: item.metadata.namespace,
         session_id: auditSessionIdRef.current || undefined,
@@ -396,6 +395,7 @@ export default function Terminal(props: TerminalProps) {
           namespace: item.metadata.namespace,
           container: currentContainerRef.current || undefined,
         },
+        status: EventStatus.CLOSED,
       });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

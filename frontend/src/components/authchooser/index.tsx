@@ -22,7 +22,6 @@ import React, { ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { generatePath, useHistory, useLocation } from 'react-router-dom';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { getAppUrl } from '../../helpers/getAppUrl';
 import { getCluster, getClusterPrefixedPath } from '../../lib/cluster';
 import { useClustersConf } from '../../lib/k8s';
@@ -32,6 +31,7 @@ import { createRouteURL } from '../../lib/router/createRouteURL';
 import { getRoute } from '../../lib/router/getRoute';
 import { getRoutePath } from '../../lib/router/getRoutePath';
 import { setConfig } from '../../redux/configSlice';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { ClusterDialog } from '../cluster/Chooser';
 import { DialogTitle } from '../common/Dialog';
 import Empty from '../common/EmptyContent';
@@ -66,6 +66,7 @@ function AuthChooser({ children }: AuthChooserProps) {
     {}) as ReactRouterLocationStateIface;
   const clusterName = getCluster() as string;
   const { t } = useTranslation();
+  const dispatchLoginEvent = useEventCallback(HeadlampEventType.LOGIN);
   const clustersRef = React.useRef<typeof clusters>(null);
   const cancelledRef = React.useRef(false);
 
@@ -209,12 +210,12 @@ function AuthChooser({ children }: AuthChooserProps) {
       clusterAuthType={clusterAuthType}
       handleTryAgain={runTestAuthAgain}
       handleOidcAuth={() => {
-        void emitAuditEvent({
-          source: 'headlamp',
-          event_type: 'ui_action',
-          action: 'login_oidc',
+        dispatchLoginEvent({
           cluster: clusterName,
           result: 'success',
+          details: {
+            method: 'oidc',
+          },
         });
         queryClient.invalidateQueries({ queryKey: ['clusterMe', clusterName], exact: true });
         history.replace(from);

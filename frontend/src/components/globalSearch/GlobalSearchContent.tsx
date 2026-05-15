@@ -32,8 +32,6 @@ import { Trans, useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
 import { generatePath, useHistory, useLocation, useRouteMatch } from 'react-router';
 import { FixedSizeList } from 'react-window';
-import { emitAuditEvent } from '../../features/audit/emitter';
-import { toAuditResource } from '../../features/audit/resourceAudit';
 import { loadClusterSettings } from '../../helpers/clusterSettings';
 import { useClustersConf, useSelectedClusters } from '../../lib/k8s';
 import ConfigMap from '../../lib/k8s/configMap';
@@ -56,6 +54,7 @@ import { createRouteURL } from '../../lib/router/createRouteURL';
 import { getDefaultRoutes } from '../../lib/router/getDefaultRoutes';
 import { getClusterPrefixedPath } from '../../lib/util';
 import { setNamespaceFilter } from '../../redux/filterSlice';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { useTypedSelector } from '../../redux/hooks';
 import { setShortcutsDialogOpen } from '../../redux/shortcutsSlice';
 import { Activity } from '../activity/Activity';
@@ -179,6 +178,7 @@ export function GlobalSearchContent({
   const clusters = useClustersConf() ?? {};
   const selectedClusters = useSelectedClusters();
   const drawerEnabled = useTypedSelector(state => state?.drawerMode?.isDetailDrawerEnabled);
+  const dispatchOpenResourceDrawer = useEventCallback(HeadlampEventType.OPEN_RESOURCE_DRAWER);
 
   const [recent, bump] = useRecent('search-recent-items');
 
@@ -245,13 +245,10 @@ export function GlobalSearchContent({
             });
 
         if (drawerEnabled) {
-          emitAuditEvent({
-            source: 'headlamp',
-            event_type: 'ui_action',
-            action: 'details_view',
+          dispatchOpenResourceDrawer({
             cluster: item.cluster,
             namespace: item.metadata.namespace,
-            resource: toAuditResource(item),
+            resource: item,
           });
           Activity.launch({
             id: item.metadata.uid,

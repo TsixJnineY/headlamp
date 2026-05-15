@@ -26,12 +26,12 @@ import Typography from '@mui/material/Typography';
 import React from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { generatePath, useHistory, useLocation } from 'react-router-dom';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { setToken } from '../../lib/auth';
 import { getCluster, getClusterPrefixedPath } from '../../lib/cluster';
 import { useClustersConf } from '../../lib/k8s';
 import { testAuth } from '../../lib/k8s/api/v1/clusterApi';
 import { ApiError } from '../../lib/k8s/api/v2/ApiError';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { ClusterDialog } from '../cluster/Chooser';
 import { DialogTitle } from '../common/Dialog';
 import HeadlampLink from '../common/Link';
@@ -44,9 +44,10 @@ export default function AuthToken() {
   const [showError, setShowError] = React.useState(false);
   const clusters = useClustersConf();
   const { t } = useTranslation();
+  const dispatchLoginEvent = useEventCallback(HeadlampEventType.LOGIN);
 
   function onAuthClicked() {
-    loginWithToken(token).then(code => {
+    loginWithToken(token, dispatchLoginEvent).then(code => {
       // If successful, redirect.
       if (code === 200) {
         if (location.state && location.state.from) {
@@ -207,7 +208,10 @@ export function PureAuthToken({
   );
 }
 
-async function loginWithToken(token: string) {
+async function loginWithToken(
+  token: string,
+  dispatchLoginEvent: ReturnType<typeof useEventCallback>
+) {
   try {
     const cluster = getCluster();
     if (!cluster) {
@@ -217,12 +221,12 @@ async function loginWithToken(token: string) {
 
     await setToken(cluster, token);
     await testAuth();
-    await emitAuditEvent({
-      source: 'headlamp',
-      event_type: 'ui_action',
-      action: 'login_token',
+    dispatchLoginEvent({
       cluster,
       result: 'success',
+      details: {
+        method: 'token',
+      },
     });
 
     return 200;

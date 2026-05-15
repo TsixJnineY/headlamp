@@ -17,10 +17,10 @@
 import type { PayloadAction } from '@reduxjs/toolkit';
 import { createAction, createListenerMiddleware, createSlice } from '@reduxjs/toolkit';
 import { useDispatch } from 'react-redux';
-import type { AuditResourceRef } from '../features/audit/types';
 import type Event from '../lib/k8s/event';
 import type { KubeObject } from '../lib/k8s/KubeObject';
 import type Pod from '../lib/k8s/pod';
+import type { ResourceRef } from '../lib/k8s/resourceRef';
 import type { Plugin } from '../plugin/lib';
 import type { RootState } from './reducers/reducers';
 
@@ -62,6 +62,36 @@ export enum HeadlampEventType {
   LIST_VIEW = 'headlamp.list-view',
   /** Events related to loading events for a resource. */
   OBJECT_EVENTS = 'headlamp.object-events',
+  /** Events related to user login. */
+  LOGIN = 'headlamp.login',
+  /** Events related to user logout. */
+  LOGOUT = 'headlamp.logout',
+  /** Events related to switching the active cluster. */
+  SWITCH_CLUSTER = 'headlamp.switch-cluster',
+  /** Events related to switching namespace filters. */
+  SWITCH_NAMESPACE = 'headlamp.switch-namespace',
+  /** Events related to port-forward lifecycle. */
+  PORT_FORWARD = 'headlamp.port-forward',
+  /** Events related to navigating to a resource. */
+  NAVIGATE_TO_RESOURCE = 'headlamp.navigate-to-resource',
+  /** Events related to opening a resource drawer. */
+  OPEN_RESOURCE_DRAWER = 'headlamp.open-resource-drawer',
+  /** Events related to cordoning a node. */
+  CORDON_NODE = 'headlamp.cordon-node',
+  /** Events related to uncordoning a node. */
+  UNCORDON_NODE = 'headlamp.uncordon-node',
+  /** Events related to draining a node. */
+  DRAIN_NODE = 'headlamp.drain-node',
+  /** Events related to triggering a CronJob. */
+  TRIGGER_CRONJOB = 'headlamp.trigger-cronjob',
+  /** Events related to creating a project. */
+  CREATE_PROJECT = 'headlamp.create-project',
+  /** Events related to deleting a project. */
+  DELETE_PROJECT = 'headlamp.delete-project',
+  /** Events related to pod debug terminal lifecycle. */
+  POD_DEBUG_TERMINAL = 'headlamp.pod-debug-terminal',
+  /** Events related to node shell terminal lifecycle. */
+  NODE_SHELL_TERMINAL = 'headlamp.node-shell-terminal',
 }
 
 /**
@@ -151,9 +181,9 @@ export interface ScaleResourceEvent {
     /** The resource for which the deletion was called. */
     resource: KubeObject;
     /** Current replica count before the scale action. */
-    previousReplicas?: number;
+    replicasBefore?: number;
     /** Desired replica count requested by the user. */
-    desiredReplicas?: number;
+    replicasAfter?: number;
     /** What exactly this event represents. 'CONFIRMED' when the scaling is selected by the user.
      * For now only 'CONFIRMED' is sent.
      */
@@ -228,7 +258,11 @@ export interface TerminalEvent {
   type: HeadlampEventType.TERMINAL;
   data: {
     /** The resource for which the terminal was opened (currently this only happens for Pod instances). */
-    resource?: KubeObject;
+    resource?: KubeObject | ResourceRef;
+    /** The target cluster for the terminal session. */
+    cluster?: string;
+    /** The target namespace for the terminal session. */
+    namespace?: string;
     /** Stable audit session identifier for correlating open/input/close events. */
     session_id?: string;
     /** What exactly this event represents. 'OPEN' when the terminal is opened. 'CLOSED' when it
@@ -245,7 +279,11 @@ export interface PodAttachEvent {
   type: HeadlampEventType.POD_ATTACH;
   data: {
     /** The resource for which the terminal was opened (currently this only happens for Pod instances). */
-    resource?: Pod;
+    resource?: Pod | ResourceRef;
+    /** The target cluster for the attach session. */
+    cluster?: string;
+    /** The target namespace for the attach session. */
+    namespace?: string;
     /** Stable audit session identifier for correlating open/input/close events. */
     session_id?: string;
     /** What exactly this event represents. 'OPEN' when the attach dialog is opened. 'CLOSED' when it
@@ -262,9 +300,9 @@ export interface CreateResourceEvent {
   type: HeadlampEventType.CREATE_RESOURCE;
   data: {
     /** The resource that was created when a single object is applied. */
-    resource?: AuditResourceRef;
+    resource?: ResourceRef;
     /** The resources that were created when multiple objects are applied. */
-    resources?: AuditResourceRef[];
+    resources?: ResourceRef[];
     /** The target cluster where the resource creation was requested. */
     cluster?: string;
     /** What exactly this event represents. 'CONFIRMED' when the user chooses to apply the new resource.
@@ -348,6 +386,38 @@ export interface EventListEvent {
     resource?: KubeObject;
     /** The list of events that were loaded. */
     events: Event[];
+  };
+}
+
+/**
+ * Event fired for audit-friendly UI actions that do not need a dedicated payload type.
+ */
+export interface AuditActionEvent {
+  type:
+    | HeadlampEventType.LOGIN
+    | HeadlampEventType.LOGOUT
+    | HeadlampEventType.SWITCH_CLUSTER
+    | HeadlampEventType.SWITCH_NAMESPACE
+    | HeadlampEventType.PORT_FORWARD
+    | HeadlampEventType.NAVIGATE_TO_RESOURCE
+    | HeadlampEventType.OPEN_RESOURCE_DRAWER
+    | HeadlampEventType.CORDON_NODE
+    | HeadlampEventType.UNCORDON_NODE
+    | HeadlampEventType.DRAIN_NODE
+    | HeadlampEventType.TRIGGER_CRONJOB
+    | HeadlampEventType.CREATE_PROJECT
+    | HeadlampEventType.DELETE_PROJECT
+    | HeadlampEventType.POD_DEBUG_TERMINAL
+    | HeadlampEventType.NODE_SHELL_TERMINAL;
+  data: {
+    cluster?: string;
+    namespace?: string;
+    session_id?: string;
+    resource?: KubeObject | ResourceRef;
+    resources?: Array<KubeObject | ResourceRef | undefined>;
+    result?: string;
+    status?: EventStatus;
+    details?: Record<string, unknown>;
   };
 }
 
@@ -447,6 +517,24 @@ export function useEventCallback(
 export function useEventCallback(
   eventInfo: HeadlampEventType.OBJECT_EVENTS
 ): (events: Event[], resource?: KubeObject) => void;
+export function useEventCallback(
+  eventType:
+    | HeadlampEventType.LOGIN
+    | HeadlampEventType.LOGOUT
+    | HeadlampEventType.SWITCH_CLUSTER
+    | HeadlampEventType.SWITCH_NAMESPACE
+    | HeadlampEventType.PORT_FORWARD
+    | HeadlampEventType.NAVIGATE_TO_RESOURCE
+    | HeadlampEventType.OPEN_RESOURCE_DRAWER
+    | HeadlampEventType.CORDON_NODE
+    | HeadlampEventType.UNCORDON_NODE
+    | HeadlampEventType.DRAIN_NODE
+    | HeadlampEventType.TRIGGER_CRONJOB
+    | HeadlampEventType.CREATE_PROJECT
+    | HeadlampEventType.DELETE_PROJECT
+    | HeadlampEventType.POD_DEBUG_TERMINAL
+    | HeadlampEventType.NODE_SHELL_TERMINAL
+): (data: EventDataType<AuditActionEvent>) => void;
 export function useEventCallback(eventType?: HeadlampEventType | string) {
   const dispatch = useDispatch();
 
@@ -527,6 +615,22 @@ export function useEventCallback(eventType?: HeadlampEventType | string) {
           })
         );
       };
+    case HeadlampEventType.LOGIN:
+    case HeadlampEventType.LOGOUT:
+    case HeadlampEventType.SWITCH_CLUSTER:
+    case HeadlampEventType.SWITCH_NAMESPACE:
+    case HeadlampEventType.PORT_FORWARD:
+    case HeadlampEventType.NAVIGATE_TO_RESOURCE:
+    case HeadlampEventType.OPEN_RESOURCE_DRAWER:
+    case HeadlampEventType.CORDON_NODE:
+    case HeadlampEventType.UNCORDON_NODE:
+    case HeadlampEventType.DRAIN_NODE:
+    case HeadlampEventType.TRIGGER_CRONJOB:
+    case HeadlampEventType.CREATE_PROJECT:
+    case HeadlampEventType.DELETE_PROJECT:
+    case HeadlampEventType.POD_DEBUG_TERMINAL:
+    case HeadlampEventType.NODE_SHELL_TERMINAL:
+      return dispatchDataEventFunc<AuditActionEvent>(eventType);
     default:
       break;
   }

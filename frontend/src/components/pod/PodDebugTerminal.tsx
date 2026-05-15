@@ -21,7 +21,6 @@ import _ from 'lodash';
 import { useSnackbar } from 'notistack';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { createAuditSessionId } from '../../features/audit/session';
 import {
   createTerminalInputCollector,
@@ -31,6 +30,7 @@ import { DEFAULT_POD_DEBUG_IMAGE, loadClusterSettings } from '../../helpers/clus
 import { getCluster } from '../../lib/cluster';
 import Pod from '../../lib/k8s/pod';
 import { Channel, useTerminalStream, XTerminalConnected } from '../../lib/k8s/useTerminalStream';
+import { EventStatus, HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 
 /**
  * Props for PodDebugTerminal.
@@ -177,6 +177,7 @@ export function PodDebugTerminal(props: PodDebugTerminalProps) {
   const { item, onClose, sessionId } = props;
   const { t } = useTranslation(['translation']);
   const { enqueueSnackbar } = useSnackbar();
+  const dispatchPodDebugTerminal = useEventCallback(HeadlampEventType.POD_DEBUG_TERMINAL);
   const [terminalContainerRef, setTerminalContainerRef] = useState<HTMLElement | null>(null);
   const exitSentRef = useRef(false);
   const pendingExitRef = useRef(false);
@@ -306,10 +307,7 @@ export function PodDebugTerminal(props: PodDebugTerminalProps) {
 
   async function wrappedOnClose() {
     terminalAuditRef.current.flush();
-    await emitAuditEvent({
-      source: 'headlamp',
-      event_type: 'ui_action',
-      action: 'close_pod_debug_terminal',
+    dispatchPodDebugTerminal({
       cluster: item.cluster || undefined,
       namespace: item.metadata.namespace,
       session_id: auditSessionIdRef.current,
@@ -320,7 +318,8 @@ export function PodDebugTerminal(props: PodDebugTerminalProps) {
         namespace: item.metadata.namespace,
         container: debugContainerNameRef.current,
       },
-      extra: {
+      status: EventStatus.CLOSED,
+      details: {
         mode: 'pod-debug',
         target_kind: 'Pod',
         target_name: item.metadata.name,

@@ -55,6 +55,157 @@ async function handleHeadlampEvent(store: AppStore, event: HeadlampEvent) {
     (!hasConcreteResource ? getCurrentNamespace(store) : undefined);
 
   switch (event.type) {
+    case HeadlampEventType.LOGIN:
+      await emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action: data?.details?.method === 'token' ? 'login_token' : 'login_oidc',
+        cluster,
+        namespace,
+        result: data?.result,
+        details: data?.details,
+      });
+      break;
+    case HeadlampEventType.LOGOUT:
+      await emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action: 'logout',
+        cluster,
+        namespace,
+        result: data?.result,
+        details: data?.details,
+      });
+      break;
+    case HeadlampEventType.SWITCH_CLUSTER:
+      await emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action: 'switch_cluster',
+        cluster,
+        namespace,
+        details: data?.details,
+      });
+      break;
+    case HeadlampEventType.SWITCH_NAMESPACE:
+      await emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action: 'switch_namespace',
+        cluster,
+        namespace: Array.isArray(data?.details?.namespaces)
+          ? data.details.namespaces.join(',')
+          : namespace,
+        details: data?.details,
+      });
+      break;
+    case HeadlampEventType.PORT_FORWARD:
+      await emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action: data?.status === EventStatus.CLOSED ? 'stop_port_forward' : 'start_port_forward',
+        cluster,
+        namespace,
+        resource: toAuditResource(resource),
+        result: data?.result,
+        details: data?.details,
+      });
+      break;
+    case HeadlampEventType.NAVIGATE_TO_RESOURCE:
+    case HeadlampEventType.OPEN_RESOURCE_DRAWER:
+      await emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action:
+          event.type === HeadlampEventType.OPEN_RESOURCE_DRAWER
+            ? 'open_resource_drawer'
+            : 'navigate_to_resource',
+        cluster,
+        namespace,
+        resource: toAuditResource(resource),
+        details: data?.details,
+      });
+      break;
+    case HeadlampEventType.CORDON_NODE:
+    case HeadlampEventType.UNCORDON_NODE:
+    case HeadlampEventType.DRAIN_NODE:
+      await emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action:
+          event.type === HeadlampEventType.DRAIN_NODE
+            ? 'drain_node'
+            : event.type === HeadlampEventType.UNCORDON_NODE
+            ? 'uncordon_node'
+            : 'cordon_node',
+        cluster,
+        namespace,
+        resource: toAuditResource(resource),
+        result: data?.result,
+        details: data?.details,
+      });
+      break;
+    case HeadlampEventType.TRIGGER_CRONJOB:
+      await emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action:
+          data?.details?.desired_suspend === true
+            ? 'suspend_cronjob'
+            : data?.details?.desired_suspend === false
+            ? 'resume_cronjob'
+            : 'spawn_cronjob_job',
+        cluster,
+        namespace,
+        resource: toAuditResource(resource),
+        result: data?.result,
+        details: data?.details,
+      });
+      break;
+    case HeadlampEventType.CREATE_PROJECT:
+    case HeadlampEventType.DELETE_PROJECT:
+      await emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action:
+          event.type === HeadlampEventType.DELETE_PROJECT
+            ? 'delete_project'
+            : data?.details?.from_yaml
+            ? 'create_project_from_yaml'
+            : 'create_project',
+        cluster,
+        namespace,
+        resource: toAuditResource(resource),
+        result: data?.result,
+        extra:
+          auditResources.length > 1
+            ? {
+                resources: auditResources,
+              }
+            : undefined,
+        details: data?.details,
+      });
+      break;
+    case HeadlampEventType.POD_DEBUG_TERMINAL:
+    case HeadlampEventType.NODE_SHELL_TERMINAL:
+      await emitAuditEvent({
+        source: 'headlamp',
+        event_type: 'ui_action',
+        action:
+          event.type === HeadlampEventType.NODE_SHELL_TERMINAL
+            ? data?.status === EventStatus.CLOSED
+              ? 'close_node_shell_terminal'
+              : 'open_node_shell_terminal'
+            : data?.status === EventStatus.CLOSED
+            ? 'close_pod_debug_terminal'
+            : 'open_pod_debug_terminal',
+        cluster,
+        namespace,
+        session_id: data?.session_id,
+        resource: toAuditResource(resource),
+        details: data?.details,
+      });
+      break;
     case HeadlampEventType.LOGS:
       await emitAuditEvent({
         source: 'headlamp',
@@ -129,16 +280,18 @@ async function handleHeadlampEvent(store: AppStore, event: HeadlampEvent) {
         },
       });
       break;
-    case HeadlampEventType.EDIT_RESOURCE:
+    case HeadlampEventType.EDIT_RESOURCE: {
+      const editAction =
+        data?.details?.action ||
+        (data?.status === EventStatus.CONFIRMED
+          ? 'save_edit_resource'
+          : data?.status === EventStatus.CLOSED
+          ? 'close_edit_resource'
+          : 'open_edit_resource');
       await emitAuditEvent({
         source: 'headlamp',
         event_type: 'ui_action',
-        action:
-          data?.status === EventStatus.CONFIRMED
-            ? 'save_edit_resource'
-            : data?.status === EventStatus.CLOSED
-            ? 'close_edit_resource'
-            : 'open_edit_resource',
+        action: editAction,
         cluster,
         namespace,
         resource: toAuditResource(resource),
@@ -146,6 +299,7 @@ async function handleHeadlampEvent(store: AppStore, event: HeadlampEvent) {
         details: data?.details,
       });
       break;
+    }
     case HeadlampEventType.SCALE_RESOURCE:
       await emitAuditEvent({
         source: 'headlamp',
@@ -156,8 +310,8 @@ async function handleHeadlampEvent(store: AppStore, event: HeadlampEvent) {
         resource: toAuditResource(resource),
         result: data?.status,
         extra: {
-          previous_replicas: data?.previousReplicas,
-          desired_replicas: data?.desiredReplicas,
+          replicas_before: data?.replicasBefore,
+          replicas_after: data?.replicasAfter,
         },
       });
       break;

@@ -237,8 +237,8 @@ function ScaleDialog(props: ScaleDialogProps) {
             onSave(numReplicas);
             dispatchHeadlampEvent({
               resource: resource,
-              previousReplicas: currentNumReplicas,
-              desiredReplicas: numReplicas,
+              replicasBefore: currentNumReplicas,
+              replicasAfter: numReplicas,
               status: EventStatus.CONFIRMED,
             });
           }}

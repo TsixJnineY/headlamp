@@ -27,10 +27,10 @@ import {
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch } from 'react-redux';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { toAuditResource } from '../../features/audit/resourceAudit';
 import Namespace from '../../lib/k8s/namespace';
 import { clusterAction } from '../../redux/clusterActionSlice';
+import { HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { ProjectDefinition } from '../../redux/projectsSlice';
 import { AppDispatch } from '../../redux/stores/store';
 import { DialogTitle } from '../common/Dialog';
@@ -52,6 +52,7 @@ export function ProjectDeleteDialog({
 }: ProjectDeleteDialogProps) {
   const { t } = useTranslation();
   const dispatch: AppDispatch = useDispatch();
+  const dispatchDeleteProject = useEventCallback(HeadlampEventType.DELETE_PROJECT);
   const [deleteNamespaces, setDeleteNamespaces] = useState(false);
 
   const handleDelete = () => {
@@ -71,14 +72,12 @@ export function ProjectDeleteDialog({
     });
 
     namespacesByCluster.forEach((clusterNamespaces, cluster) => {
-      void emitAuditEvent({
-        source: 'headlamp',
-        event_type: 'ui_action',
-        action: 'delete_project',
+      dispatchDeleteProject({
         cluster,
         resource: toAuditResource(clusterNamespaces[0]),
         result: 'requested',
-        extra: {
+        resources: clusterNamespaces.map(namespace => toAuditResource(namespace)).filter(Boolean),
+        details: {
           project_id: project.id,
           delete_namespaces: deleteNamespaces,
           namespaces: clusterNamespaces.map(namespace => namespace.metadata.name),

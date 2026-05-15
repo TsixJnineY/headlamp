@@ -16,7 +16,6 @@
 
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import svgr from 'vite-plugin-svgr';
 import { viteStaticCopy } from "vite-plugin-static-copy";
 
@@ -30,6 +29,14 @@ export default defineConfig({
   },
   envPrefix: 'REACT_APP_',
   base: process.env.PUBLIC_URL,
+  resolve: {
+    alias: {
+      buffer: 'buffer',
+      path: 'path-browserify',
+      process: 'process/browser',
+      stream: 'stream-browserify',
+    },
+  },
   server: {
     port: 3000,
     proxy: {
@@ -106,9 +113,6 @@ export default defineConfig({
       },
     }),
     react(),
-    nodePolyfills({
-      include: ['process', 'buffer', 'stream'],
-    }),
     // Make sure we copy the minified monaco-editor source into the static folder
     // since it's loaded dynamically and not bundled via ESM. We do it this way
     // to support setting the localization language

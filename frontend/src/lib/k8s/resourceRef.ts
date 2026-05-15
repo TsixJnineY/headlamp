@@ -14,33 +14,10 @@
  * limitations under the License.
  */
 
-import type { ResourceRef } from '../../lib/k8s/resourceRef';
-
-export type AuditResourceRef = ResourceRef;
-
-export interface AuditUserRef {
-  sub?: string;
-  email?: string;
-  groups?: string[];
-}
-
-export interface AuditEventPayload {
-  source?: 'headlamp';
-  event_type: 'ui_action' | 'terminal_input' | 'portforward' | string;
-  action?: string;
-  result?: string;
+export interface ResourceRef {
+  kind?: string;
+  name?: string;
   cluster?: string;
   namespace?: string;
-  session_id?: string;
-  pod?: string;
   container?: string;
-  command?: string;
-  res_kind?: string;
-  res_name?: string;
-  res_namespace?: string;
-  res_container?: string;
-  resource?: AuditResourceRef;
-  user?: AuditUserRef;
-  extra?: Record<string, unknown>;
-  details?: Record<string, unknown>;
 }

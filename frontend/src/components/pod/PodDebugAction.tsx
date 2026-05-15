@@ -17,11 +17,11 @@
 import { Icon } from '@iconify/react';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
-import { emitAuditEvent } from '../../features/audit/emitter';
 import { createAuditSessionId } from '../../features/audit/session';
 import { loadClusterSettings } from '../../helpers/clusterSettings';
 import { getCluster } from '../../lib/cluster';
 import Pod from '../../lib/k8s/pod';
+import { EventStatus, HeadlampEventType, useEventCallback } from '../../redux/headlampEventSlice';
 import { Activity } from '../activity/Activity';
 import type { ActivityState } from '../activity/activitySlice';
 import ActionButton from '../common/ActionButton';
@@ -65,6 +65,7 @@ export function PodDebugAction(props: PodDebugActionProps) {
   const { item } = props;
   const { t } = useTranslation(['translation']);
   const activities = useSelector((state: { activity: ActivityState }) => state.activity.activities);
+  const dispatchPodDebugTerminal = useEventCallback(HeadlampEventType.POD_DEBUG_TERMINAL);
 
   if (item === null) {
     return null;
@@ -95,17 +96,17 @@ export function PodDebugAction(props: PodDebugActionProps) {
 
             const sessionId = createAuditSessionId('pod-debug');
 
-            void emitAuditEvent({
-              source: 'headlamp',
-              event_type: 'ui_action',
-              action: 'open_pod_debug_terminal',
+            dispatchPodDebugTerminal({
               cluster: item.cluster || undefined,
               namespace: item.metadata.namespace,
               session_id: sessionId,
               resource: {
                 kind: 'Pod',
                 name: item.metadata.name,
+                cluster: item.cluster || undefined,
+                namespace: item.metadata.namespace,
               },
+              status: EventStatus.OPENED,
             });
 
             Activity.launch({

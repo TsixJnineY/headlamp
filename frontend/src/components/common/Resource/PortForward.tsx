@@ -25,7 +25,6 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { emitAuditEvent } from '../../../features/audit/emitter';
 import { isDockerDesktop } from '../../../helpers/isDockerDesktop';
 import { isElectron } from '../../../helpers/isElectron';
 import { getCluster } from '../../../lib/cluster';
@@ -39,6 +38,11 @@ import { KubeContainer } from '../../../lib/k8s/cluster';
 import { KubeObject, KubeObjectInterface } from '../../../lib/k8s/KubeObject';
 import Pod from '../../../lib/k8s/pod';
 import Service from '../../../lib/k8s/service';
+import {
+  EventStatus,
+  HeadlampEventType,
+  useEventCallback,
+} from '../../../redux/headlampEventSlice';
 import ActionButton from '../ActionButton';
 export { type PortForward as PortForwardState } from '../../../lib/k8s/api/v1/portForward';
 import PortForwardStartDialog from '../../portforward/PortForwardStartDialog';
@@ -118,6 +122,7 @@ function PortForwardContent(props: PortForwardProps) {
   const [startDialogOpen, setStartDialogOpen] = React.useState(false);
 
   const { t } = useTranslation(['translation', 'resource']);
+  const dispatchPortForwardEvent = useEventCallback(HeadlampEventType.PORT_FORWARD);
 
   const [pods, podsFetchError] = Pod.useList({
     namespace,
@@ -280,10 +285,7 @@ function PortForwardContent(props: PortForwardProps) {
       .then((data: any) => {
         setLoading(false);
         setPortForward(data);
-        void emitAuditEvent({
-          source: 'headlamp',
-          event_type: 'ui_action',
-          action: 'start_port_forward',
+        dispatchPortForwardEvent({
           cluster,
           namespace,
           resource: resource
@@ -295,7 +297,8 @@ function PortForwardContent(props: PortForwardProps) {
               }
             : undefined,
           result: data?.status || PORT_FORWARD_RUNNING_STATUS,
-          extra: {
+          status: EventStatus.OPENED,
+          details: {
             pod: podName,
             service: serviceName || undefined,
             localPort: data?.port || port,
@@ -333,10 +336,7 @@ function PortForwardContent(props: PortForwardProps) {
       .then(() => {
         portForward.status = PORT_FORWARD_STOP_STATUS;
         setPortForward(portForward);
-        void emitAuditEvent({
-          source: 'headlamp',
-          event_type: 'ui_action',
-          action: 'stop_port_forward',
+        dispatchPortForwardEvent({
           cluster,
           namespace,
           resource: resource
@@ -348,7 +348,8 @@ function PortForwardContent(props: PortForwardProps) {
               }
             : undefined,
           result: PORT_FORWARD_STOP_STATUS,
-          extra: {
+          status: EventStatus.CLOSED,
+          details: {
             pod: displayPodName || undefined,
             service: !isPod ? name : undefined,
             localPort: portForward.port,
